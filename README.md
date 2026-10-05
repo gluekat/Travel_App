@@ -13,7 +13,7 @@ PackWise is a local-first travel app that picks and packs outfits for a trip fro
 Requires Node 20+.
 
 ```bash
-cd packwise
+cd Travel_App
 npm install
 npm run dev        # http://localhost:5173
 npm test           # unit tests (Vitest)
