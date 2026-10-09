@@ -30,6 +30,7 @@ env:
 permissions:
   contents: read
 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -53,7 +54,10 @@ jobs:
       with:
         name: node-app
         path: .
-
+    
+    - name: Azure Login
+      uses: Azure/login@v3.1.0
+  
   deploy:
     permissions:
       contents: none
