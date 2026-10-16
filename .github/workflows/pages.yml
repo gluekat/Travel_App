@@ -1,0 +1,50 @@
+# Builds PackWise and publishes it to GitHub Pages:
+# https://gluekat.github.io/Travel_App/
+# Runs on every push to the default branch, or manually from the Actions tab.
+# Only the app's static files are published; user data never leaves each visitor's device.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [claude/packwise-travel-app-m5rq30]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push replaces a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Build for the /Travel_App/ sub-path
+        run: npm run build
+        env:
+          VITE_BASE: /Travel_App/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

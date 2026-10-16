@@ -34,7 +34,7 @@ export function App() {
       <header className="no-print sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-2">
           <a href="#/trips" className="flex items-center gap-2 font-semibold text-teal-800">
-            <img src="/icon.svg" alt="" className="h-7 w-7" />
+            <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="h-7 w-7" />
             PackWise
           </a>
           <nav className="flex gap-1">

@@ -25,6 +25,14 @@ npm run preview    # serve the production build (service worker enabled)
 
 The service worker is only active in the production build (`npm run build && npm run preview`), or when you deploy `dist/` to any static host. HTTPS is required for installation everywhere except `localhost`.
 
+## Live version (GitHub Pages)
+
+The latest build is published to **https://gluekat.github.io/Travel_App/** on every push to the default branch, by `.github/workflows/pages.yml` (tests → build → deploy). It's handy for sharing the work in progress. Anyone with the link can use the app, and each visitor's closet and trips stay in their own browser. Only the app's files are hosted.
+
+One-time setup: *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
+
+The Pages build sets `VITE_BASE=/Travel_App/` because Pages serves the site from that sub-path. Local, preview and desktop builds use `/`.
+
 ## Installing the app (PWA)
 
 1. Open the production build in Chrome, Edge or Safari.
