@@ -95,18 +95,41 @@ export async function importDatabase(data: unknown): Promise<void> {
 }
 
 /** Export and trigger a browser download of the backup JSON. */
-export async function downloadBackup(): Promise<void> {
+/**
+ * Export everything and hand it to the user: on phones and tablets via the
+ * share sheet (so it can go straight to the Files app), otherwise as a download.
+ */
+export async function downloadBackup(): Promise<'shared' | 'downloaded'> {
   const backup = await exportDatabase();
+  const name = `packwise-backup-${backup.exportedAt.slice(0, 10)}.json`;
   const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+  const file = new File([blob], name, { type: 'application/json' });
+  const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  let how: 'shared' | 'downloaded' = 'downloaded';
+  if (touch && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'PackWise backup' });
+      how = 'shared';
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return 'shared'; // user cancelled the sheet
+      triggerDownload(blob, name);
+    }
+  } else {
+    triggerDownload(blob, name);
+  }
+  await setSetting('lastExportAt', Date.now());
+  return how;
+}
+
+function triggerDownload(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `packwise-backup-${backup.exportedAt.slice(0, 10)}.json`;
+  a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  await setSetting('lastExportAt', Date.now());
 }
 
 export async function importBackupFile(file: File): Promise<void> {

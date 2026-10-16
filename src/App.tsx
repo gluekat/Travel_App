@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useRoute } from './lib/router';
 import { Icon } from './components/ui';
 import { OfflineBanner } from './components/OfflineBanner';
+import { SyncBanner } from './components/SyncBanner';
 import { ClosetPage } from './features/closet/ClosetPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { TripsPage } from './features/trips/TripsPage';
@@ -53,6 +54,7 @@ export function App() {
           </nav>
         </div>
         <OfflineBanner />
+        <SyncBanner />
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-4">
         <Page route={route} />

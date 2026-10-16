@@ -7,6 +7,7 @@ import { formatTimestamp } from '../../lib/dates';
 import { useTempUnit } from '../../lib/hooks';
 import { Banner, Button, Card, Chip } from '../../components/ui';
 import { PrivacyNote } from './PrivacyNote';
+import { DataFilePanel } from './DataFilePanel';
 
 function formatBytes(n: number) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
@@ -30,8 +31,8 @@ export function SettingsPage() {
   async function doExport() {
     setBusy(true);
     try {
-      await downloadBackup();
-      setMessage({ tone: 'info', text: 'Backup downloaded. Keep it somewhere safe.' });
+      const how = await downloadBackup();
+      setMessage({ tone: 'info', text: how === 'shared' ? 'Backup shared. Save it somewhere safe, e.g. your Files app.' : 'Backup downloaded. Keep it somewhere safe.' });
     } catch (e) {
       setMessage({ tone: 'error', text: `Export failed: ${(e as Error).message}` });
     } finally {
@@ -58,18 +59,20 @@ export function SettingsPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Settings & data</h1>
 
+      <DataFilePanel />
+
       <Card>
         <h2 className="mb-2 font-semibold">Backup & restore</h2>
         <Banner tone="warn">
-          Your closet lives only in this browser. Clearing browser data or uninstalling the app <strong>deletes it</strong> unless you have
-          exported a backup.
+          Without a linked data file, your closet lives only in this browser: clearing browser data or uninstalling the app <strong>deletes it</strong>{' '}
+          unless you have a backup.
         </Banner>
         <p className="mt-3 text-sm text-slate-600">
           Last export: {lastExportAt ? formatTimestamp(lastExportAt) : <strong>never</strong>}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="primary" onClick={doExport} disabled={busy}>
-            Export everything (JSON)
+            Export / save a backup (JSON)
           </Button>
           <Button onClick={() => fileRef.current?.click()} disabled={busy}>
             Import backup…

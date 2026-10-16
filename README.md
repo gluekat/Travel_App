@@ -48,13 +48,27 @@ Your closet, photos, activities, outfits and packing lists are **never** sent an
 
 ## Your data and backups
 
-All data is stored in **IndexedDB** in this browser profile. That covers closet items, photos (resized to 800px JPEG Blobs), trips, days, cached weather, outfits, packing lists and settings. On startup the app asks the browser for persistent storage (`navigator.storage.persist()`) so it isn't evicted when disk space runs low. *Data & privacy* shows whether the browser granted it.
+PackWise works on a local database in the browser (**IndexedDB**). It holds closet items, photos (resized to 800px JPEG Blobs), saved outfits, trips, days, cached weather, outfits, packing lists and settings. On startup the app asks for persistent storage (`navigator.storage.persist()`) so the browser doesn't evict it when disk space runs low.
 
-> ⚠️ **Clearing your browser data, or uninstalling the PWA, deletes your closet** unless you have exported a backup.
+Browser storage is still deleted when you **clear browser data**. To survive that, keep a copy on your own disk:
 
-**Back up:** *Data & privacy* → **Export everything (JSON)**. This downloads one `packwise-backup-YYYY-MM-DD.json` file containing every table, with photos embedded as base64.
+### Linked data file (Chrome / Edge on a computer)
 
-**Restore:** *Data & privacy* → **Import backup…**, then choose the file. This **replaces** all PackWise data in this browser. Use it to move to another device or browser too.
+*Data & privacy* → **Create data file…** and pick a location, e.g. `Documents/PackWise/packwise-data.json`. From then on, every change is saved to that file automatically, about 1.5 seconds after you make it and when you switch away from the app.
+
+- **After clearing browser data** (or on another browser or computer): *Data & privacy* → **Open existing data file…** and choose the same file. Everything comes back.
+- After a browser restart, Chrome may ask you to allow access to the file again. A banner offers **Reconnect**.
+- If the file and the browser both changed while disconnected, PackWise asks which one to keep instead of overwriting either.
+- The file uses the same format as Export, so it is also a full backup. It never leaves your machine unless you put it in a synced folder yourself.
+
+This uses the browser's File System Access API (`src/storage/fileSync.ts`), which Safari, Firefox and mobile browsers don't offer.
+
+### Everywhere else: backups and reminders
+
+In Safari, Firefox, and on phones and tablets, data lives only in the browser. When you have changes that haven't been backed up for a week, a banner reminds you. **Save a backup** opens the share sheet on phones and tablets (choose *Save to Files*) and downloads the file on computers.
+
+- **Back up:** *Data & privacy* → **Export / save a backup (JSON)**. This saves `packwise-backup-YYYY-MM-DD.json` with every table, photos embedded as base64.
+- **Restore:** *Data & privacy* → **Import backup…**, then choose the file. This **replaces** all PackWise data in this browser. Backups from older versions are upgraded automatically.
 
 ## Weather
 

@@ -10,7 +10,8 @@ export function PrivacyNote({ compact = false }: { compact?: boolean }) {
     <div className="space-y-2 text-sm text-slate-700">
       <p>
         <strong>Your data never leaves this device.</strong> PackWise has no accounts, no servers, no analytics and no cloud storage. Your
-        closet, photos, trips and packing lists live in this browser's local database (IndexedDB).
+        closet, photos, trips and packing lists live in this browser's local database (IndexedDB) and, if you link one, in a
+        data file on your own disk.
       </p>
       <p>The only network requests the app makes are to the free Open-Meteo APIs:</p>
       <ul className="list-disc space-y-1 pl-5">
