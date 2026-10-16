@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import {
   ACTIVITIES,
@@ -8,6 +9,9 @@ import {
   type ClosetItem,
   type WarmthLevel,
 } from '../../db/types';
+import { cleanTags } from '../../db/migrate';
+import { Stars } from '../../components/Stars';
+import { TagInput } from '../../components/TagInput';
 import { Button, ChipGroup, Field, inputClass } from '../../components/ui';
 import { PhotoInput } from './PhotoInput';
 
@@ -23,6 +27,8 @@ const EMPTY: Draft = {
   activities: [],
   quantity: 1,
   wearCount: 1,
+  favorite: 0,
+  customTags: [],
 };
 
 const WARMTH_LABELS = ['', 'Very light', 'Light', 'Medium', 'Warm', 'Very warm'];
@@ -30,9 +36,10 @@ const WARMTH_LABELS = ['', 'Very light', 'Light', 'Medium', 'Warm', 'Very warm']
 export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => void }) {
   const [draft, setDraft] = useState<Draft>(() => {
     if (!item) return EMPTY;
-    const { name, category, color, warmth, formality, weatherTags, activities, photo, quantity = 1, wearCount = 1 } = item;
-    return { name, category, color, warmth, formality, weatherTags, activities, photo, quantity, wearCount };
+    const { name, category, color, warmth, formality, weatherTags, activities, photo, quantity = 1, wearCount = 1, favorite = 0, customTags = [] } = item;
+    return { name, category, color, warmth, formality, weatherTags, activities, photo, quantity, wearCount, favorite, customTags };
   });
+  const knownTags = useLiveQuery(async () => (await db.closetItems.orderBy('customTags').uniqueKeys()) as string[], [], []);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
   async function submit(e: FormEvent) {
@@ -45,6 +52,8 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
       color: draft.color.trim(),
       quantity: Math.max(1, Math.round(draft.quantity) || 1),
       wearCount: Math.max(1, Math.round(draft.wearCount) || 1),
+      favorite: Math.max(0, Math.min(5, Math.round(draft.favorite) || 0)),
+      customTags: cleanTags(draft.customTags),
     };
     if (item?.id != null) {
       await db.closetItems.update(item.id, { ...clean, updatedAt: now });
@@ -57,6 +66,10 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
   return (
     <form onSubmit={submit} className="space-y-4">
       <PhotoInput value={draft.photo} onChange={(b) => set('photo', b)} />
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-slate-700">Favorite score</span>
+        <Stars value={draft.favorite} onChange={(n) => set('favorite', n)} />
+      </div>
       <Field label="Name">
         <input className={inputClass} value={draft.name} onChange={(e) => set('name', e.target.value)} required autoFocus />
       </Field>
@@ -105,6 +118,10 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
       <Field label="Good for">
         <ChipGroup label="Activities" options={ACTIVITIES} value={draft.activities} onChange={(v) => set('activities', v)} />
       </Field>
+      <div>
+        <span className="mb-1 block text-sm font-medium text-slate-700">Custom tags</span>
+        <TagInput value={draft.customTags} onChange={(v) => set('customTags', v)} suggestions={knownTags} />
+      </div>
       <div className="flex justify-end gap-2 pt-2">
         <Button onClick={onDone}>Cancel</Button>
         <Button type="submit" variant="primary">

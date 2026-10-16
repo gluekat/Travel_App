@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
-import { CATEGORIES, type Category, type ClosetItem, type Outfit, type TripDay } from '../../db/types';
+import type { ClosetItem, Outfit, TripDay } from '../../db/types';
 import { capacity } from '../../engine/rules';
 import { swapCandidates } from '../../engine/suggest';
 import { ItemThumb } from '../../components/ItemThumb';
-import { Button, Chip, Icon, Modal, inputClass } from '../../components/ui';
+import { ClosetPicker } from '../../components/ClosetPicker';
+import { Button, Icon, Modal } from '../../components/ui';
+import { saveOutfitToCloset } from '../closet/savedOutfitService';
 import {
   addItemsToOutfit,
   deleteOutfit,
@@ -46,69 +48,6 @@ function WearHint({ item, usage, inThisOutfit }: { item: ClosetItem; usage: Map<
     <span className={`text-xs ${left <= 0 ? 'font-medium text-amber-700' : 'text-slate-500'}`}>
       {left <= 0 ? `no clean wears left (${total} total)` : `${left} of ${total} clean wear${total > 1 ? 's' : ''} left`}
     </span>
-  );
-}
-
-function ItemPicker({ outfit, closet, usage, onClose }: { outfit: Outfit; closet: ClosetItem[]; usage: Map<number, number>; onClose: () => void }) {
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<Category | null>(null);
-  const [picked, setPicked] = useState<number[]>([]);
-  const q = query.trim().toLowerCase();
-  const list = closet.filter(
-    (i) => !outfit.itemIds.includes(i.id!) && (!category || i.category === category) && (!q || i.name.toLowerCase().includes(q) || i.color.toLowerCase().includes(q)),
-  );
-  const toggle = (id: number) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-
-  return (
-    <Modal title={`Add items to ${outfit.label}`} onClose={onClose}>
-      <div className="space-y-3">
-        <input type="search" className={inputClass} placeholder="Search your closet…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search closet" />
-        <div className="flex flex-wrap gap-1.5">
-          <Chip active={!category} onClick={() => setCategory(null)}>
-            all
-          </Chip>
-          {CATEGORIES.map((c) => (
-            <Chip key={c} active={category === c} onClick={() => setCategory(category === c ? null : c)}>
-              {c}
-            </Chip>
-          ))}
-        </div>
-        <ul className="max-h-[45vh] space-y-1.5 overflow-y-auto">
-          {list.map((item) => (
-            <li key={item.id}>
-              <label className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2 ${picked.includes(item.id!) ? 'border-teal-500 bg-teal-50' : 'border-slate-200'}`}>
-                <input type="checkbox" checked={picked.includes(item.id!)} onChange={() => toggle(item.id!)} className="h-4 w-4 accent-teal-700" />
-                <ItemThumb item={item} size="h-10 w-10" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">
-                    {item.name}
-                    {(item.quantity ?? 1) > 1 && <span className="ml-1 text-slate-400">×{item.quantity}</span>}
-                  </span>
-                  <span className="flex flex-wrap gap-x-2">
-                    <span className="text-xs capitalize text-slate-500">{item.category}</span>
-                    <WearHint item={item} usage={usage} inThisOutfit={false} />
-                  </span>
-                </span>
-              </label>
-            </li>
-          ))}
-          {list.length === 0 && <li className="text-sm text-slate-500">No matching items.</li>}
-        </ul>
-        <div className="flex justify-end gap-2">
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            disabled={!picked.length}
-            onClick={async () => {
-              await addItemsToOutfit(outfit.id!, picked);
-              onClose();
-            }}
-          >
-            Add {picked.length || ''} item{picked.length === 1 ? '' : 's'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
   );
 }
 
@@ -164,6 +103,7 @@ export function OutfitCard(props: OutfitCardProps) {
   const [swapping, setSwapping] = useState<number>();
   const [adding, setAdding] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [label, setLabel] = useState(outfit.label);
   const byId = useMemo(() => new Map(closet.map((i) => [i.id!, i])), [closet]);
   const items = outfit.itemIds.map((id) => byId.get(id)).filter((i): i is ClosetItem => !!i);
@@ -245,9 +185,32 @@ export function OutfitCard(props: OutfitCardProps) {
         <Button onClick={() => setSuggesting(true)}>
           <Icon name="shirt" /> Suggest outfit
         </Button>
+        {items.length > 0 && (
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              const name = prompt('Save this outfit to your closet as:', outfit.label);
+              if (name == null) return;
+              await saveOutfitToCloset(name, outfit.itemIds);
+              setSaved(true);
+            }}
+            title="Save to your closet's outfits for future trips"
+          >
+            <Icon name="bag" /> {saved ? 'Saved ✓' : 'Save to closet'}
+          </Button>
+        )}
       </div>
 
-      {adding && <ItemPicker outfit={outfit} closet={closet} usage={usage} onClose={() => setAdding(false)} />}
+      {adding && (
+        <ClosetPicker
+          title={`Add items to ${outfit.label}`}
+          closet={closet}
+          excludeIds={outfit.itemIds}
+          hint={(item) => <WearHint item={item} usage={usage} inThisOutfit={false} />}
+          onPick={(ids) => addItemsToOutfit(outfit.id!, ids)}
+          onClose={() => setAdding(false)}
+        />
+      )}
       {swapping != null && <SwapDialog {...props} itemId={swapping} onClose={() => setSwapping(undefined)} />}
       {suggesting && <SuggestPanel {...props} onClose={() => setSuggesting(false)} />}
     </div>

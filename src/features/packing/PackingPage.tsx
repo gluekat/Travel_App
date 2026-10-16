@@ -7,6 +7,7 @@ import { dateRange, formatDay } from '../../lib/dates';
 import { ItemThumb } from '../../components/ItemThumb';
 import { Banner, Button, Icon, inputClass } from '../../components/ui';
 import { toEngineItem } from '../outfits/outfitService';
+import { TripTabs } from '../trips/TripTabs';
 
 const GENERAL_SUGGESTIONS = ['Phone charger', 'Passport / ID', 'Medications', 'Sunscreen', 'Travel adapter', 'Pajamas'];
 
@@ -129,17 +130,21 @@ export function PackingPage({ tripId }: { tripId: number }) {
 
   return (
     <div className="space-y-4">
-      <div className="no-print flex flex-wrap items-center justify-between gap-2">
-        <a href={`#/trips/${tripId}`} className="text-sm text-teal-700">← Back to trip</a>
-        <Button onClick={() => window.print()}>
-          <Icon name="print" /> Print
-        </Button>
-      </div>
       <div>
-        <h1 className="text-xl font-semibold">Packing list: {trip.placeLabel ?? trip.destination}</h1>
+        <a href="#/trips" className="no-print text-sm text-teal-700">← Trips</a>
+        <h1 className="text-xl font-semibold">{trip.placeLabel ?? trip.destination}</h1>
         <p className="text-sm text-slate-600">
           {formatDay(trip.startDate)} to {formatDay(trip.endDate)} · {days} days
         </p>
+      </div>
+      <TripTabs tripId={tripId} current="packing" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">
+          Packing Checklist<span className="hidden print:inline">: {trip.placeLabel ?? trip.destination}</span>
+        </h2>
+        <Button className="no-print" onClick={() => window.print()}>
+          <Icon name="print" /> Print
+        </Button>
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-center">
@@ -172,7 +177,7 @@ export function PackingPage({ tripId }: { tripId: number }) {
 
       {clothing.length === 0 && (
         <p className="text-sm text-slate-600">
-          No clothes picked yet. <a className="underline" href={`#/trips/${tripId}`}>Choose outfits</a> for your days first.
+          No clothes picked yet. <a className="underline" href={`#/trips/${tripId}`}>Choose outfits</a> in the Trip Overview first.
         </p>
       )}
 

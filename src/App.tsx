@@ -16,7 +16,7 @@ const NAV = [
 
 function Page({ route }: { route: string[] }): ReactNode {
   const [section = 'trips', id, sub] = route;
-  if (section === 'closet') return <ClosetPage />;
+  if (section === 'closet') return <ClosetPage view={id === 'outfits' ? 'outfits' : 'items'} />;
   if (section === 'settings') return <SettingsPage />;
   if (section === 'trips' && id) {
     const tripId = Number(id);

@@ -18,6 +18,7 @@ export function toEngineItem(i: ClosetItem): EngineItem {
     activities: i.activities,
     quantity: Math.max(1, i.quantity ?? 1),
     wearCount: Math.max(1, i.wearCount ?? 1),
+    favorite: i.favorite ?? 0,
   };
 }
 

@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
-import { migrateV1toV2, type Tables } from './migrate';
-import type { ClosetItem, Outfit, PackingItem, Setting, Trip, TripDay } from './types';
+import { migrateV1toV2, migrateV2toV3, type Tables } from './migrate';
+import type { ClosetItem, Outfit, PackingItem, SavedOutfit, Setting, Trip, TripDay } from './types';
 
 export class PackWiseDB extends Dexie {
   closetItems!: EntityTable<ClosetItem, 'id'>;
@@ -9,6 +9,7 @@ export class PackWiseDB extends Dexie {
   outfits!: EntityTable<Outfit, 'id'>;
   packingItems!: EntityTable<PackingItem, 'id'>;
   settings!: EntityTable<Setting, 'key'>;
+  savedOutfits!: EntityTable<SavedOutfit, 'id'>;
 
   constructor(name = 'packwise') {
     super(name);
@@ -33,6 +34,17 @@ export class PackWiseDB extends Dexie {
           await tx.table(n).bulkAdd(migrated[n]);
         }
       });
+    // v3: favorite score + custom tags on items, saved outfits in the closet.
+    this.version(3)
+      .stores({
+        closetItems: '++id, category, formality, *weatherTags, *activities, *customTags, isSample, updatedAt',
+        savedOutfits: '++id, favorite, updatedAt',
+      })
+      .upgrade(async (tx) => {
+        const migrated = migrateV2toV3({ closetItems: await tx.table('closetItems').toArray() });
+        await tx.table('closetItems').clear();
+        await tx.table('closetItems').bulkAdd(migrated.closetItems);
+      });
   }
 }
 
@@ -45,6 +57,7 @@ export const TABLE_NAMES = [
   'outfits',
   'packingItems',
   'settings',
+  'savedOutfits',
 ] as const;
 export type TableName = (typeof TABLE_NAMES)[number];
 
@@ -69,8 +82,11 @@ export async function deleteTrip(tripId: number): Promise<void> {
 
 /** Delete a closet item and remove it from any outfits / packing lists. */
 export async function deleteClosetItem(itemId: number): Promise<void> {
-  await db.transaction('rw', [db.closetItems, db.outfits, db.packingItems], async () => {
+  await db.transaction('rw', [db.closetItems, db.outfits, db.packingItems, db.savedOutfits], async () => {
     await db.closetItems.delete(itemId);
+    await db.savedOutfits.toCollection().modify((o) => {
+      o.itemIds = o.itemIds.filter((id) => id !== itemId);
+    });
     await db.packingItems.where('itemId').equals(itemId).delete();
     await db.outfits.toCollection().modify((o) => {
       o.itemIds = o.itemIds.filter((id) => id !== itemId);

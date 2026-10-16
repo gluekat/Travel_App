@@ -166,6 +166,9 @@ export function scoreItem(item: EngineItem, ctx: ScoreContext): number {
   else if (used > 0) s += 1.5;
   if (ctx.avoid.has(item.id)) s -= 3;
 
+  // Personal preference: up to +2.5 for a 5-star favorite.
+  s += Math.max(0, Math.min(5, item.favorite ?? 0)) * 0.5;
+
   return s + ctx.jitter(item.id);
 }
 

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity } from '../db/types';
 import { capacity, copiesNeeded, groupOccasions, requiredFormality, warmthNeeds } from './rules';
-import { assignSlots, capacityGaps, countWears, outfitTargets, planTrip, suggestOptions, swapCandidates } from './suggest';
+import { assignSlots, capacityGaps, countWears, outfitTargets, planTrip, rankSavedOutfits, suggestOptions, swapCandidates } from './suggest';
 import { dedupeItemIds, diffPacking, generalQty, packingStats, packLines } from './packing';
 import type { EngineDay, EngineItem, EngineWeather, SuggestRequest } from './types';
 
 let nextId = 1;
 type ItemInit = Partial<EngineItem> & Pick<EngineItem, 'name' | 'category'>;
 function item(p: ItemInit): EngineItem {
-  return { id: nextId++, color: 'black', warmth: 2, formality: 'casual', weatherTags: [], activities: [], quantity: 1, wearCount: 1, ...p };
+  return { id: nextId++, color: 'black', warmth: 2, formality: 'casual', weatherTags: [], activities: [], quantity: 1, wearCount: 1, favorite: 0, ...p };
 }
 
 const closet = (() => {
@@ -131,6 +131,46 @@ describe('suggestOptions', () => {
     const o = first({ day: d, items: [...onlyShorts, closet.shorts], usage: used });
     expect(o.itemIds).toContain(closet.shorts.id);
     expect(o.gaps.join(' ')).toMatch(/No clean shorts left/);
+  });
+});
+
+describe('favorites', () => {
+  it('prefers higher-rated items when they fit equally well', () => {
+    const d = day(1, ['sightseeing'], HOT);
+    const plain = first({ day: d }).itemIds;
+    expect(plain).toContain(closet.tee.id);
+    // Make the linen shirt a 5-star favorite: it should now win the top slot.
+    const items = ALL.map((i) => (i.id === closet.linen.id ? { ...i, favorite: 5 } : i));
+    const fav = first({ day: d, items });
+    expect(fav.itemIds).toContain(closet.linen.id);
+    expect(fav.rationale).toMatch(/Includes your favorite: linen shirt/);
+  });
+
+  it('does not let a favorite override the weather', () => {
+    const items = ALL.map((i) => (i.id === closet.puffer.id ? { ...i, favorite: 5 } : i));
+    expect(first({ day: day(1, ['sightseeing'], HOT), items }).itemIds).not.toContain(closet.puffer.id);
+  });
+});
+
+describe('rankSavedOutfits', () => {
+  const summer = { id: 1, name: 'Summer stroll', favorite: false, itemIds: [closet.tee.id, closet.shorts.id, closet.sandals.id] };
+  const winter = { id: 2, name: 'Winter city', favorite: false, itemIds: [closet.sweater.id, closet.jeans.id, closet.puffer.id, closet.boots.id] };
+
+  it('ranks saved outfits by fit for the day', () => {
+    expect(rankSavedOutfits(ALL, day(1, ['sightseeing'], HOT), ['sightseeing'], [winter, summer]).map((r) => r.name)).toEqual(['Summer stroll', 'Winter city']);
+    expect(rankSavedOutfits(ALL, day(1, ['sightseeing'], COLD), ['sightseeing'], [summer, winter])[0].name).toBe('Winter city');
+  });
+
+  it('boosts favorite outfits and reports gaps', () => {
+    const similar = { id: 3, name: 'Also summer', favorite: true, itemIds: [closet.linen.id, closet.shorts.id, closet.sandals.id] };
+    const ranked = rankSavedOutfits(ALL, day(1, ['sightseeing'], HOT), ['sightseeing'], [summer, similar]);
+    expect(ranked[0].name).toBe('Also summer');
+    const cold = rankSavedOutfits(ALL, day(4, ['sightseeing'], COLD), ['sightseeing'], [summer]);
+    expect(cold[0].gaps.join(' ')).toMatch(/No outerwear warm enough for Day 4/);
+  });
+
+  it('skips saved outfits whose items were all deleted', () => {
+    expect(rankSavedOutfits(ALL, day(1, [], HOT), [], [{ id: 9, name: 'Gone', favorite: true, itemIds: [9999] }])).toEqual([]);
   });
 });
 

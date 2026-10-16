@@ -14,6 +14,7 @@ import { PrivacyNote } from '../settings/PrivacyNote';
 import { capacityGaps, countWears } from '../../engine/suggest';
 import { fillEmptyDays, toEngineItem } from '../outfits/outfitService';
 import { DayCard } from './DayCard';
+import { TripTabs } from './TripTabs';
 import { PlaceSearch } from './PlaceSearch';
 import { MAX_TRIP_DAYS, setTripDates, setTripPlace } from './tripService';
 
@@ -131,7 +132,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
           <Button
             variant="danger"
             onClick={async () => {
-              if (confirm('Delete this trip, its outfits and packing list?')) {
+              if (confirm('Delete this trip, its outfits and packing checklist?')) {
                 await deleteTrip(tripId);
                 navigate('/trips');
               }
@@ -141,6 +142,8 @@ export function TripDetail({ tripId }: { tripId: number }) {
           </Button>
         </div>
       </div>
+
+      <TripTabs tripId={tripId} current="overview" />
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
         <span className="font-medium">Weather</span>
@@ -167,9 +170,6 @@ export function TripDetail({ tripId }: { tripId: number }) {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" onClick={() => navigate(`/trips/${tripId}/packing`)}>
-          <Icon name="bag" /> Packing list
-        </Button>
         <Button onClick={fillEmpty} disabled={generating || closet.length === 0} title="Suggest outfits for days with no clothes picked yet">
           <Icon name="shirt" /> Suggest outfits for empty days
         </Button>

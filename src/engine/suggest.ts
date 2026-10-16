@@ -19,7 +19,7 @@ import {
   type ScoreContext,
   type Slot,
 } from './rules';
-import type { DayPlan, EngineDay, EngineItem, OutfitEngine, PlanOptions, SuggestRequest, SuggestedOutfit } from './types';
+import type { DayPlan, EngineDay, EngineItem, OutfitEngine, PlanOptions, RankedSavedOutfit, SuggestRequest, SuggestedOutfit } from './types';
 
 const SLOT_ORDER: Slot[] = ['outerwear', 'top', 'dress', 'swimwear', 'bottom', 'shoes', 'accessory'];
 const ACCESSORY_MIN_SCORE = 2.5;
@@ -231,6 +231,9 @@ export function explainOutfit(
   if (FORMALITY_RANK[formality] > 0) parts.push(`${capitalize(formality)} enough for ${group.activities.filter((a) => ['business', 'dinner out', 'nightlife'].includes(a)).join(' and ')}.`);
   else if (suited.length) parts.push(`Picked for ${group.activities.join(', ')}.`);
 
+  const favorites = chosen.filter((i) => (i.favorite ?? 0) >= 4);
+  if (favorites.length) parts.push(`Includes your favorite${favorites.length > 1 ? 's' : ''}: ${listNames(favorites)}.`);
+
   const reused = chosen.filter((i) => (usage.get(i.id) ?? 0) > 0).length;
   if (reused) parts.push(`Reuses ${reused} item${reused > 1 ? 's' : ''} already in your bag.`);
   return parts.join(' ');
@@ -402,6 +405,44 @@ export function swapCandidates(
     .map((i) => ({ i, s: scoreItem(i, sctx) }))
     .sort((a, b) => b.s - a.s)
     .map(({ i }) => i);
+}
+
+/**
+ * Rank outfits saved in the closet by how well they suit this day: the
+ * average item score for the weather and activities, plus a bonus for
+ * outfits marked favorite. Best first.
+ */
+export function rankSavedOutfits(
+  items: EngineItem[],
+  day: EngineDay,
+  activities: Activity[],
+  saved: { id: number; name: string; favorite: boolean; itemIds: number[] }[],
+  usage: Map<number, number> = new Map(),
+  formatTemp: (c: number) => string = defaultFormat,
+): RankedSavedOutfit[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const group = occasionFor(activities.length ? activities : day.activities);
+  const ctx: BuildContext = { items, day, group, locked: [], usage, avoid: new Set(), exclude: new Set(), jitter: () => 0 };
+  return saved
+    .map((o) => {
+      const outfitItems = o.itemIds.map((id) => byId.get(id)).filter((i): i is EngineItem => !!i);
+      const slots = assignSlots(outfitItems);
+      const fit = outfitItems.length
+        ? outfitItems.reduce((n, i) => n + scoreItem(i, scoreContext(ctx, slots.get(i.id)!)), 0) / outfitItems.length + (o.favorite ? 2 : 0)
+        : -Infinity;
+      const ids = outfitItems.map((i) => i.id);
+      return {
+        savedOutfitId: o.id,
+        name: o.name,
+        favorite: o.favorite,
+        itemIds: ids,
+        fit: Math.round(fit * 10) / 10,
+        rationale: explainOutfit(items, day, group, ids, usage, formatTemp),
+        gaps: detectGaps(items, day, ids, group, formatTemp),
+      };
+    })
+    .filter((r) => r.itemIds.length > 0)
+    .sort((a, b) => b.fit - a.fit || a.gaps.length - b.gaps.length);
 }
 
 export const rulesEngine: OutfitEngine = { suggestOptions, planTrip };

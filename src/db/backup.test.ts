@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it } from 'vitest';
 import Dexie from 'dexie';
-import { db, PackWiseDB } from './schema';
+import { db, deleteClosetItem, PackWiseDB } from './schema';
+import { cleanTags } from './migrate';
+import { saveOutfitToCloset, updateSavedOutfit } from '../features/closet/savedOutfitService';
 import { exportDatabase, importDatabase } from './backup';
 import { seedSampleWardrobe } from './seed';
 import { createTrip } from '../features/trips/tripService';
@@ -162,6 +164,31 @@ describe('packing sync', () => {
   });
 });
 
+describe('saved outfits, favorites and custom tags', () => {
+  it('saves, edits, exports and restores closet outfits', async () => {
+    await seedSampleWardrobe();
+    const [a, b, c] = await db.closetItems.limit(3).toArray();
+    const id = await saveOutfitToCloset('  Weekend  ', [a.id!, b.id!, a.id!]);
+    expect(await db.savedOutfits.get(id)).toMatchObject({ name: 'Weekend', itemIds: [a.id, b.id], favorite: false });
+    await updateSavedOutfit(id, { favorite: true, itemIds: [a.id!, b.id!, c.id!] });
+
+    const backup = JSON.parse(JSON.stringify(await exportDatabase()));
+    await Promise.all(db.tables.map((t) => t.clear()));
+    await importDatabase(backup);
+    expect(await db.savedOutfits.get(id)).toMatchObject({ favorite: true, itemIds: [a.id, b.id, c.id] });
+
+    await deleteClosetItem(b.id!);
+    expect((await db.savedOutfits.get(id))?.itemIds).toEqual([a.id, c.id]);
+  });
+
+  it('indexes custom tags for filtering', async () => {
+    await seedSampleWardrobe();
+    expect((await db.closetItems.orderBy('customTags').uniqueKeys()).sort()).toEqual(['packable', 'wrinkle-free']);
+    expect((await db.closetItems.where('customTags').equals('packable').toArray()).map((i) => i.name)).toEqual(['Packable rain jacket']);
+    expect(cleanTags([' Packable ', 'packable', '', 'Carry  On'])).toEqual(['packable', 'carry on']);
+  });
+});
+
 describe('migration from v1 data', () => {
   const v1Tables = {
     closetItems: [{ id: 1, name: 'Tee', category: 'top', color: '', warmth: 1, formality: 'casual', weatherTags: [], activities: [], isSample: false, createdAt: 1, updatedAt: 1 }],
@@ -195,6 +222,8 @@ describe('migration from v1 data', () => {
   it('imports a v1 backup file', async () => {
     await importDatabase({ app: 'packwise', version: 1, exportedAt: '', tables: v1Tables });
     await checkMigrated();
+    expect(await db.closetItems.get(1)).toMatchObject({ favorite: 0, customTags: [] });
+    expect(await db.savedOutfits.count()).toBe(0);
   });
 
   it('upgrades an existing v1 browser database', async () => {
@@ -212,7 +241,8 @@ describe('migration from v1 data', () => {
     old.close();
 
     const upgraded = new PackWiseDB(name);
-    expect(await upgraded.closetItems.get(1)).toMatchObject({ quantity: 1, wearCount: 1 });
+    expect(await upgraded.closetItems.get(1)).toMatchObject({ quantity: 1, wearCount: 1, favorite: 0, customTags: [] });
+    expect(await upgraded.savedOutfits.count()).toBe(0);
     expect(await upgraded.outfits.count()).toBe(2);
     expect(await upgraded.packingItems.count()).toBe(6);
     upgraded.close();

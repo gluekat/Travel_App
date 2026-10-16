@@ -44,6 +44,10 @@ export interface ClosetItem {
   quantity: number;
   /** How many times one copy can be worn before it needs washing. */
   wearCount: number;
+  /** How much you like wearing it, 0 (neutral) to 5. Suggestions favour higher scores. */
+  favorite: number;
+  /** Your own labels, e.g. "packable", "wrinkle-free". */
+  customTags: string[];
   photo?: Blob;
   isSample: boolean;
   createdAt: number;
@@ -100,6 +104,16 @@ export interface Outfit {
   lockedItemIds: number[];
   /** "Why" text from the last applied suggestion; empty once edited by hand. */
   rationale: string;
+}
+
+/** An outfit saved in the closet for reuse across trips. */
+export interface SavedOutfit {
+  id?: number;
+  name: string;
+  itemIds: number[];
+  favorite: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
 
 /**

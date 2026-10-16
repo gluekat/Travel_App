@@ -2,9 +2,9 @@
  * Data migrations, shared by the Dexie schema upgrade and backup import so
  * an old backup file restores into the current shape.
  */
-import type { ClosetItem, Outfit, PackingItem, TripDay } from './types';
+import type { Outfit, PackingItem, TripDay } from './types';
 
-export const CURRENT_DATA_VERSION = 2;
+export const CURRENT_DATA_VERSION = 3;
 
 type Row = Record<string, unknown>;
 export type Tables = Record<string, Row[]>;
@@ -55,13 +55,24 @@ export function migrateV1toV2(tables: Tables): Tables {
   return { ...tables, closetItems, outfits: outfits as unknown as Row[], packingItems: packingItems as unknown as Row[] };
 }
 
+/** v2 → v3: closet items gain a favorite score and custom tags; saved outfits table appears. */
+export function migrateV2toV3(tables: Tables): Tables {
+  return {
+    ...tables,
+    closetItems: (tables.closetItems ?? []).map((i) => ({ favorite: 0, customTags: [], ...i })),
+    savedOutfits: tables.savedOutfits ?? [],
+  };
+}
+
 /** Bring tables from any older data version up to the current one. */
 export function migrateTables(tables: Tables, fromVersion: number): Tables {
   let t = tables;
   if (fromVersion < 2) t = migrateV1toV2(t);
+  if (fromVersion < 3) t = migrateV2toV3(t);
   return t;
 }
 
-export function normalizeClosetItem(i: ClosetItem): ClosetItem {
-  return { ...i, quantity: Math.max(1, i.quantity ?? 1), wearCount: Math.max(1, i.wearCount ?? 1) };
+/** Normalize free-text tags: trimmed, lower-case, unique, non-empty. */
+export function cleanTags(tags: string[]): string[] {
+  return [...new Set(tags.map((t) => t.trim().toLowerCase().replace(/\s+/g, ' ')).filter(Boolean))];
 }

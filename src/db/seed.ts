@@ -1,8 +1,8 @@
 import { db, deleteClosetItem } from './schema';
 import type { ClosetItem } from './types';
 
-type SeedItem = Omit<ClosetItem, 'id' | 'isSample' | 'createdAt' | 'updatedAt' | 'quantity' | 'wearCount'> &
-  Partial<Pick<ClosetItem, 'quantity' | 'wearCount'>>;
+type SeedItem = Omit<ClosetItem, 'id' | 'isSample' | 'createdAt' | 'updatedAt' | 'quantity' | 'wearCount' | 'favorite' | 'customTags'> &
+  Partial<Pick<ClosetItem, 'quantity' | 'wearCount' | 'favorite' | 'customTags'>>;
 
 /** Typical wears before washing, by category, for the sample wardrobe. */
 const SAMPLE_WEARS: Record<ClosetItem['category'], number> = {
@@ -19,16 +19,16 @@ const SAMPLE_WEARS: Record<ClosetItem['category'], number> = {
 export const SAMPLE_WARDROBE: SeedItem[] = [
   { name: 'White linen shirt', quantity: 2, category: 'top', color: 'white', warmth: 1, formality: 'smart casual', weatherTags: ['hot', 'sun'], activities: ['sightseeing', 'dinner out', 'beach'] },
   { name: 'Navy crew tee', quantity: 3, category: 'top', color: 'navy', warmth: 1, formality: 'casual', weatherTags: ['hot', 'sun'], activities: ['sightseeing', 'hiking', 'travel day', 'lounging'] },
-  { name: 'Grey merino sweater', category: 'top', color: 'grey', warmth: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out', 'travel day', 'business'] },
+  { name: 'Grey merino sweater', favorite: 4, customTags: ['wrinkle-free'], category: 'top', color: 'grey', warmth: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out', 'travel day', 'business'] },
   { name: 'Oxford button-down', category: 'top', color: 'light blue', warmth: 2, formality: 'formal', weatherTags: [], activities: ['business', 'dinner out'] },
   { name: 'Dark jeans', category: 'bottom', color: 'indigo', warmth: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out', 'travel day', 'nightlife'] },
   { name: 'Khaki shorts', category: 'bottom', color: 'khaki', warmth: 1, formality: 'casual', weatherTags: ['hot', 'sun'], activities: ['sightseeing', 'beach', 'lounging'] },
   { name: 'Wool trousers', category: 'bottom', color: 'charcoal', warmth: 3, formality: 'formal', weatherTags: ['cold'], activities: ['business', 'dinner out'] },
   { name: 'Hiking pants', category: 'activewear', color: 'olive', warmth: 2, formality: 'casual', weatherTags: ['rain-ready'], activities: ['hiking', 'workout'] },
   { name: 'Summer sundress', category: 'dress', color: 'yellow', warmth: 1, formality: 'smart casual', weatherTags: ['hot', 'sun'], activities: ['sightseeing', 'dinner out', 'beach'] },
-  { name: 'Packable rain jacket', category: 'outerwear', color: 'teal', warmth: 2, formality: 'casual', weatherTags: ['rain-ready'], activities: ['sightseeing', 'hiking', 'travel day'] },
+  { name: 'Packable rain jacket', favorite: 4, customTags: ['packable'], category: 'outerwear', color: 'teal', warmth: 2, formality: 'casual', weatherTags: ['rain-ready'], activities: ['sightseeing', 'hiking', 'travel day'] },
   { name: 'Puffer jacket', category: 'outerwear', color: 'black', warmth: 5, formality: 'casual', weatherTags: ['cold'], activities: ['sightseeing', 'hiking', 'travel day'] },
-  { name: 'White sneakers', category: 'shoes', color: 'white', warmth: 2, formality: 'smart casual', weatherTags: ['sun'], activities: ['sightseeing', 'travel day', 'dinner out', 'nightlife'] },
+  { name: 'White sneakers', favorite: 5, category: 'shoes', color: 'white', warmth: 2, formality: 'smart casual', weatherTags: ['sun'], activities: ['sightseeing', 'travel day', 'dinner out', 'nightlife'] },
   { name: 'Waterproof hiking boots', category: 'shoes', color: 'brown', warmth: 3, formality: 'casual', weatherTags: ['rain-ready', 'cold'], activities: ['hiking', 'sightseeing'] },
   { name: 'Sandals', category: 'shoes', color: 'tan', warmth: 1, formality: 'casual', weatherTags: ['hot', 'sun'], activities: ['beach', 'lounging', 'sightseeing'] },
   { name: 'Leather loafers', category: 'shoes', color: 'brown', warmth: 2, formality: 'formal', weatherTags: [], activities: ['business', 'dinner out'] },
@@ -43,6 +43,8 @@ export async function seedSampleWardrobe(): Promise<void> {
     SAMPLE_WARDROBE.map((item) => ({
       quantity: 1,
       wearCount: SAMPLE_WEARS[item.category],
+      favorite: 0,
+      customTags: [],
       ...item,
       isSample: true,
       createdAt: now,

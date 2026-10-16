@@ -18,6 +18,8 @@ export interface EngineItem {
   quantity: number;
   /** Wears per copy before washing. */
   wearCount: number;
+  /** Preference 0-5; higher scores are suggested more. */
+  favorite: number;
 }
 
 export interface EngineWeather {
@@ -59,6 +61,18 @@ export interface SuggestRequest {
   seed?: number;
   /** Format a °C value for messages; defaults to "12°C". */
   formatTemp?: (c: number) => string;
+}
+
+/** A closet-saved outfit, ranked for how well it fits a day. */
+export interface RankedSavedOutfit {
+  savedOutfitId: number;
+  name: string;
+  favorite: boolean;
+  itemIds: number[];
+  /** Average fit of its items for the day (higher is better). */
+  fit: number;
+  rationale: string;
+  gaps: string[];
 }
 
 export interface DayPlan {
