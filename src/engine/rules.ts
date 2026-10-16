@@ -115,8 +115,8 @@ export interface ScoreContext {
   occasion: Occasion;
   activities: Activity[];
   formality: Formality;
-  /** Items already chosen on other days (reusing them keeps packing light). */
-  reused: Set<number>;
+  /** Wears already planned for each item elsewhere in the trip. */
+  usage: Map<number, number>;
   /** Items to steer away from (e.g. ones used in the sibling outfit). */
   avoid: Set<number>;
   jitter: (id: number) => number;
@@ -159,11 +159,24 @@ export function scoreItem(item: EngineItem, ctx: ScoreContext): number {
   if (gap < 0) s -= 4 * -gap;
   else if (gap > 0) s -= ctx.occasion === 'active' || ctx.occasion === 'beach' ? 2 * gap : 0.5 * gap;
 
-  // Packing economy and variety.
-  if (ctx.reused.has(item.id)) s += 1.5;
+  // Packing economy: reuse what's already packed while clean wears remain;
+  // strongly avoid items with no clean wears left.
+  const used = ctx.usage.get(item.id) ?? 0;
+  if (used >= capacity(item)) s -= 8;
+  else if (used > 0) s += 1.5;
   if (ctx.avoid.has(item.id)) s -= 3;
 
   return s + ctx.jitter(item.id);
+}
+
+/** Total wears available on a trip: copies owned × wears before washing. */
+export function capacity(item: Pick<EngineItem, 'quantity' | 'wearCount'>): number {
+  return Math.max(1, item.quantity) * Math.max(1, item.wearCount);
+}
+
+/** Copies to pack for a number of planned wears (never more than you own). */
+export function copiesNeeded(item: Pick<EngineItem, 'quantity' | 'wearCount'>, wears: number): number {
+  return Math.min(Math.max(1, item.quantity), Math.ceil(wears / Math.max(1, item.wearCount)));
 }
 
 /** Small deterministic pseudo-random jitter in [0, 0.4) for tie-breaking. */

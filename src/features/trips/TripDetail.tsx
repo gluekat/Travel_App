@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
 import type { Trip } from '../../db/types';
@@ -11,7 +11,8 @@ import { LIVE_TTL_MS } from '../../weather/resolveWeather';
 import { refreshTripWeather } from '../../weather/tripWeather';
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
 import { PrivacyNote } from '../settings/PrivacyNote';
-import { generateTripOutfits } from '../outfits/outfitService';
+import { capacityGaps, countWears } from '../../engine/suggest';
+import { fillEmptyDays, toEngineItem } from '../outfits/outfitService';
 import { DayCard } from './DayCard';
 import { PlaceSearch } from './PlaceSearch';
 import { MAX_TRIP_DAYS, setTripDates, setTripPlace } from './tripService';
@@ -73,6 +74,9 @@ export function TripDetail({ tripId }: { tripId: number }) {
   const [generating, setGenerating] = useState(false);
   const autoFetched = useRef(false);
   const fmt = useCallback((c: number) => formatTemp(c, unit), [unit]);
+  const usage = useMemo(() => countWears(outfits ?? []), [outfits]);
+  const overWorn = useMemo(() => (closet && outfits ? capacityGaps(closet.map(toEngineItem), outfits) : []), [closet, outfits]);
+  const [fillMessage, setFillMessage] = useState<string>();
 
   const hasLocation = trip?.lat != null && trip?.lon != null;
   const lastFetched = days?.reduce((m, d) => (d.weather && d.weather.source !== 'manual' ? Math.max(m, d.weather.fetchedAt) : m), 0) ?? 0;
@@ -100,16 +104,15 @@ export function TripDetail({ tripId }: { tripId: number }) {
   if (trip === undefined || !days || !outfits || !closet) return <p className="text-sm text-slate-500">Loading…</p>;
   if (trip === null) return <p>Trip not found. <a href="#/trips" className="underline">Back to trips</a></p>;
 
-  async function suggestAll() {
+  async function fillEmpty() {
     setGenerating(true);
     try {
-      await generateTripOutfits(tripId, fmt, Math.floor(Math.random() * 1e6));
+      const n = await fillEmptyDays(tripId, fmt, Math.floor(Math.random() * 1e6));
+      setFillMessage(n ? `Suggested outfits for ${n} day${n > 1 ? 's' : ''}. Review and edit them below.` : 'Every day already has clothes picked.');
     } finally {
       setGenerating(false);
     }
   }
-
-  const hasOutfits = outfits.length > 0;
 
   return (
     <div className="space-y-4">
@@ -164,16 +167,24 @@ export function TripDetail({ tripId }: { tripId: number }) {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" onClick={suggestAll} disabled={generating || closet.length === 0}>
-          <Icon name="shirt" /> {hasOutfits ? 'Regenerate all outfits' : 'Suggest outfits'}
+        <Button variant="primary" onClick={() => navigate(`/trips/${tripId}/packing`)}>
+          <Icon name="bag" /> Packing list
         </Button>
-        {hasOutfits && (
-          <Button onClick={() => navigate(`/trips/${tripId}/packing`)}>
-            <Icon name="bag" /> Packing list
-          </Button>
-        )}
+        <Button onClick={fillEmpty} disabled={generating || closet.length === 0} title="Suggest outfits for days with no clothes picked yet">
+          <Icon name="shirt" /> Suggest outfits for empty days
+        </Button>
         {closet.length === 0 && <span className="text-sm text-slate-500">Add items to your closet first.</span>}
       </div>
+      {fillMessage && <Banner tone="info">{fillMessage}</Banner>}
+      {overWorn.length > 0 && (
+        <div className="space-y-1">
+          {overWorn.map((g) => (
+            <Banner key={g} tone="warn">
+              ⚠️ {g}
+            </Banner>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-3">
         {days.map((d, i) => (
@@ -183,6 +194,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
             index={i + 1}
             outfits={outfits.filter((o) => o.tripDayId === d.id)}
             closet={closet}
+            usage={usage}
             unit={unit}
             formatTemp={fmt}
           />

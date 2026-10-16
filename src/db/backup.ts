@@ -1,7 +1,8 @@
 import { db, setSetting, TABLE_NAMES, type TableName } from './schema';
+import { CURRENT_DATA_VERSION, migrateTables, type Tables } from './migrate';
 
 export const BACKUP_APP = 'packwise';
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = CURRENT_DATA_VERSION;
 
 interface EncodedBlob {
   __blob: true;
@@ -80,12 +81,15 @@ export function validateBackup(data: unknown): asserts data is BackupFile {
 /** Replace all local data with the contents of a backup. */
 export async function importDatabase(data: unknown): Promise<void> {
   validateBackup(data);
+  const decoded: Tables = {};
+  for (const name of TABLE_NAMES) decoded[name] = ((data.tables[name] ?? []) as Record<string, unknown>[]).map(decodeRow);
+  const tables = migrateTables(decoded, data.version);
   await db.transaction('rw', TABLE_NAMES.map((n) => db.table(n)), async () => {
     for (const name of TABLE_NAMES) {
       const table = db.table(name);
       await table.clear();
-      const rows = (data.tables[name] ?? []) as Record<string, unknown>[];
-      if (rows.length) await table.bulkAdd(rows.map(decodeRow));
+      const rows = tables[name] ?? [];
+      if (rows.length) await table.bulkAdd(rows);
     }
   });
 }

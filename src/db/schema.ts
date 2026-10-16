@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import { migrateV1toV2, type Tables } from './migrate';
 import type { ClosetItem, Outfit, PackingItem, Setting, Trip, TripDay } from './types';
 
 export class PackWiseDB extends Dexie {
@@ -19,6 +20,19 @@ export class PackWiseDB extends Dexie {
       packingItems: '++id, tripId, itemId, [tripId+itemId]',
       settings: 'key',
     });
+    // v2: item quantity + wear count, user-chosen outfits only, general packing items.
+    this.version(2)
+      .stores({})
+      .upgrade(async (tx) => {
+        const names = ['closetItems', 'trips', 'tripDays', 'outfits', 'packingItems'];
+        const tables: Tables = {};
+        for (const n of names) tables[n] = await tx.table(n).toArray();
+        const migrated = migrateV1toV2(tables);
+        for (const n of ['closetItems', 'outfits', 'packingItems']) {
+          await tx.table(n).clear();
+          await tx.table(n).bulkAdd(migrated[n]);
+        }
+      });
   }
 }
 

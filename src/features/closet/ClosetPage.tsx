@@ -114,9 +114,13 @@ export function ClosetPage() {
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{item.name}</p>
+                  <p className="truncate font-medium">
+                    {item.name}
+                    {(item.quantity ?? 1) > 1 && <span className="ml-1 text-sm font-normal text-slate-500">×{item.quantity}</span>}
+                  </p>
                   <p className="text-xs capitalize text-slate-500">
-                    {item.category} · {item.color || 'no color'} · warmth {item.warmth} · {item.formality}
+                    {item.category} · {item.color || 'no color'} · warmth {item.warmth} · {item.formality} · {item.wearCount ?? 1} wear
+                    {(item.wearCount ?? 1) > 1 ? 's' : ''} per wash
                   </p>
                 </div>
                 <div className="flex shrink-0">

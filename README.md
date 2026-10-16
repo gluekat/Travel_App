@@ -2,10 +2,10 @@
 
 PackWise is a local-first travel app that picks and packs outfits for a trip from **your own closet**, based on the forecast and what you plan to do each day.
 
-- **Closet:** enter your wardrobe once, with photos, warmth, formality, weather tags and the activities each item suits.
+- **Closet:** enter your wardrobe once, with photos, warmth, formality, weather tags, the activities each item suits, **how many identical copies you own** (e.g. white socks ×5) and **how many wears each copy lasts before washing** (default 1).
 - **Trips:** set a destination and dates, then pick activities for each day. Weather comes from Open-Meteo.
-- **Outfits:** get 1–2 outfits per day, each with a short "why". You can swap, lock or remove items, regenerate a day, and see gaps flagged (e.g. *"No rain-ready outerwear for Day 3"*).
-- **Packing list:** a deduplicated list grouped by category, with checkboxes that persist, a mix-and-match stat, extras, and a print view.
+- **Outfits:** each day shows its weather and the outfit(s) you chose. Build them by hand (add, swap, lock or remove items), add as many outfits per day as you like (e.g. "Hiking", "Dinner"), and press **Suggest outfit** when you want ideas: you get two options, each with a short "why" and any gaps (e.g. *"No rain-ready outerwear for Day 3"*). **Suggest outfits for empty days** fills every day you haven't planned yet.
+- **Packing list:** general items for the whole trip (Underwear and Socks at 1 per day, Jacket, Toiletries, plus your own), then clothes grouped by category with the number of copies to pack. Checkboxes persist, and there's a mix-and-match stat and a print view.
 - **Works offline:** it installs as a PWA, and everything is stored in your browser.
 
 ## Setup
@@ -72,8 +72,9 @@ The engine lives in [`src/engine/`](src/engine) and is pure TypeScript: no React
 - Temperature maps to a core warmth target and a minimum outerwear warmth (`rules.ts › warmthNeeds`).
 - Precipitation chance **> 50%** requires rain-ready outerwear or footwear.
 - Activities set the required formality (business → formal; dinner out or nightlife → smart casual) and boost items tagged for those activities.
-- A day with different kinds of activities (e.g. hiking + dinner) gets a separate outfit for each. Otherwise the second outfit is an unselected *Alternative*.
-- Items already chosen on other days score higher, to keep the packing list small.
+- **Suggest outfit** dresses for the activities you pick for that outfit, keeping any locked items. **Suggest outfits for empty days** gives a day with different kinds of activities (e.g. hiking + dinner) one outfit for each.
+- Items already chosen on other days score higher, to keep the packing list small, but only while they have clean wears left. An item can be worn **copies owned × wears before washing** times per trip. Beyond that it's avoided, and if it's still used you get a warning to pack more or plan laundry.
+- The packing list packs `min(copies owned, ceil(planned wears ÷ wears before washing))` of each item.
 - The exact same outfit is never suggested on two consecutive days.
 - Locked items are always kept, and conflicting slots are never filled (e.g. a locked dress blocks tops and bottoms).
 

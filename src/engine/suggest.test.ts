@@ -1,32 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity } from '../db/types';
-import { groupOccasions, requiredFormality, warmthNeeds } from './rules';
-import { assignSlots, detectGaps, outfitTargets, planDay, planTrip, swapCandidates } from './suggest';
-import { dedupeItemIds, diffPacking, packingStats } from './packing';
-import type { EngineDay, EngineItem, EngineWeather } from './types';
+import { capacity, copiesNeeded, groupOccasions, requiredFormality, warmthNeeds } from './rules';
+import { assignSlots, capacityGaps, countWears, outfitTargets, planTrip, suggestOptions, swapCandidates } from './suggest';
+import { dedupeItemIds, diffPacking, generalQty, packingStats, packLines } from './packing';
+import type { EngineDay, EngineItem, EngineWeather, SuggestRequest } from './types';
 
 let nextId = 1;
-function item(p: Partial<EngineItem> & Pick<EngineItem, 'name' | 'category'>): EngineItem {
-  return { id: nextId++, color: 'black', warmth: 2, formality: 'casual', weatherTags: [], activities: [], ...p };
+type ItemInit = Partial<EngineItem> & Pick<EngineItem, 'name' | 'category'>;
+function item(p: ItemInit): EngineItem {
+  return { id: nextId++, color: 'black', warmth: 2, formality: 'casual', weatherTags: [], activities: [], quantity: 1, wearCount: 1, ...p };
 }
 
 const closet = (() => {
   nextId = 1;
   return {
-    tee: item({ name: 'Tee', category: 'top', warmth: 1, weatherTags: ['hot'], activities: ['sightseeing', 'hiking'] }),
-    linen: item({ name: 'Linen shirt', category: 'top', warmth: 1, formality: 'smart casual', weatherTags: ['hot'], activities: ['sightseeing', 'dinner out'] }),
-    sweater: item({ name: 'Sweater', category: 'top', warmth: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out'] }),
+    tee: item({ name: 'Tee', category: 'top', warmth: 1, quantity: 3, weatherTags: ['hot'], activities: ['sightseeing', 'hiking'] }),
+    linen: item({ name: 'Linen shirt', category: 'top', warmth: 1, quantity: 2, formality: 'smart casual', weatherTags: ['hot'], activities: ['sightseeing', 'dinner out'] }),
+    sweater: item({ name: 'Sweater', category: 'top', warmth: 3, wearCount: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out'] }),
     oxford: item({ name: 'Oxford', category: 'top', warmth: 2, formality: 'formal', activities: ['business', 'dinner out'] }),
-    shorts: item({ name: 'Shorts', category: 'bottom', warmth: 1, weatherTags: ['hot'], activities: ['sightseeing', 'beach'] }),
-    jeans: item({ name: 'Jeans', category: 'bottom', warmth: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out'] }),
-    trousers: item({ name: 'Trousers', category: 'bottom', warmth: 3, formality: 'formal', activities: ['business', 'dinner out'] }),
-    rainJacket: item({ name: 'Rain jacket', category: 'outerwear', warmth: 2, weatherTags: ['rain-ready'], activities: ['sightseeing', 'hiking'] }),
-    puffer: item({ name: 'Puffer', category: 'outerwear', warmth: 5, weatherTags: ['cold'], activities: ['sightseeing'] }),
-    sneakers: item({ name: 'Sneakers', category: 'shoes', warmth: 2, formality: 'smart casual', weatherTags: ['sun'], activities: ['sightseeing', 'dinner out'] }),
-    boots: item({ name: 'Hiking boots', category: 'shoes', warmth: 3, weatherTags: ['rain-ready', 'cold'], activities: ['hiking', 'sightseeing'] }),
-    loafers: item({ name: 'Loafers', category: 'shoes', warmth: 2, formality: 'formal', activities: ['business', 'dinner out'] }),
-    trunks: item({ name: 'Trunks', category: 'swimwear', warmth: 1, weatherTags: ['hot'], activities: ['beach'] }),
-    sandals: item({ name: 'Sandals', category: 'shoes', warmth: 1, weatherTags: ['hot', 'sun'], activities: ['beach'] }),
+    shorts: item({ name: 'Shorts', category: 'bottom', warmth: 1, wearCount: 3, weatherTags: ['hot'], activities: ['sightseeing', 'beach'] }),
+    jeans: item({ name: 'Jeans', category: 'bottom', warmth: 3, wearCount: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out'] }),
+    trousers: item({ name: 'Trousers', category: 'bottom', warmth: 3, wearCount: 3, formality: 'formal', activities: ['business', 'dinner out'] }),
+    rainJacket: item({ name: 'Rain jacket', category: 'outerwear', warmth: 2, wearCount: 10, weatherTags: ['rain-ready'], activities: ['sightseeing', 'hiking'] }),
+    puffer: item({ name: 'Puffer', category: 'outerwear', warmth: 5, wearCount: 10, weatherTags: ['cold'], activities: ['sightseeing'] }),
+    sneakers: item({ name: 'Sneakers', category: 'shoes', warmth: 2, wearCount: 10, formality: 'smart casual', weatherTags: ['sun'], activities: ['sightseeing', 'dinner out'] }),
+    boots: item({ name: 'Hiking boots', category: 'shoes', warmth: 3, wearCount: 10, weatherTags: ['rain-ready', 'cold'], activities: ['hiking', 'sightseeing'] }),
+    loafers: item({ name: 'Loafers', category: 'shoes', warmth: 2, wearCount: 10, formality: 'formal', activities: ['business', 'dinner out'] }),
+    trunks: item({ name: 'Trunks', category: 'swimwear', warmth: 1, wearCount: 3, weatherTags: ['hot'], activities: ['beach'] }),
+    sandals: item({ name: 'Sandals', category: 'shoes', warmth: 1, wearCount: 10, weatherTags: ['hot', 'sun'], activities: ['beach'] }),
   };
 })();
 const ALL = Object.values(closet);
@@ -39,8 +40,8 @@ function day(index: number, activities: Activity[], weather?: EngineWeather): En
   return { id: 100 + index, index, date: `2026-07-${String(index).padStart(2, '0')}`, activities, weather };
 }
 
-const ctx = { reused: new Set<number>(), previousOutfits: [] as number[][], seed: 1 };
-const names = (ids: number[]) => ids.map((id) => ALL.find((i) => i.id === id)!.name);
+const names = (ids: number[]) => ids.map((id: number) => ALL.find((i) => i.id === id)!.name);
+const first = (req: Omit<SuggestRequest, 'items'> & { items?: EngineItem[] }) => suggestOptions({ items: ALL, seed: 1, ...req })[0];
 
 describe('rules', () => {
   it('maps temperatures to warmth needs', () => {
@@ -60,69 +61,76 @@ describe('rules', () => {
     expect(groupOccasions(['dinner out', 'hiking', 'sightseeing']).map((g) => g.occasion)).toEqual(['active', 'dressy']);
     expect(groupOccasions([]).map((g) => g.occasion)).toEqual(['everyday']);
   });
+
+  it('computes capacity and copies from quantity and wears before washing', () => {
+    const socks = { quantity: 5, wearCount: 1 };
+    const jeans = { quantity: 1, wearCount: 3 };
+    expect(capacity(socks)).toBe(5);
+    expect(copiesNeeded(socks, 3)).toBe(3);
+    expect(copiesNeeded(socks, 8)).toBe(5); // never more than you own
+    expect(capacity(jeans)).toBe(3);
+    expect(copiesNeeded(jeans, 3)).toBe(1);
+    expect(copiesNeeded({ quantity: 2, wearCount: 2 }, 3)).toBe(2);
+  });
 });
 
-describe('planDay', () => {
+describe('suggestOptions', () => {
   it('dresses light for heat and skips outerwear', () => {
-    const plan = planDay(ALL, day(1, ['sightseeing'], HOT), ctx);
-    const ids = plan.outfits[0].itemIds;
+    const ids = first({ day: day(1, ['sightseeing'], HOT) }).itemIds;
     expect(ids).toContain(closet.shorts.id);
     expect(ids).toContain(closet.tee.id);
     expect(ids.some((id) => [closet.puffer.id, closet.rainJacket.id].includes(id))).toBe(false);
   });
 
   it('requires warm outerwear in the cold', () => {
-    const plan = planDay(ALL, day(1, ['sightseeing'], COLD), ctx);
-    expect(plan.outfits[0].itemIds).toContain(closet.puffer.id);
-    expect(plan.outfits[0].itemIds).toContain(closet.jeans.id);
-    expect(plan.outfits[0].itemIds).not.toContain(closet.shorts.id);
+    const ids = first({ day: day(1, ['sightseeing'], COLD) }).itemIds;
+    expect(ids).toContain(closet.puffer.id);
+    expect(ids).toContain(closet.jeans.id);
+    expect(ids).not.toContain(closet.shorts.id);
   });
 
   it('requires rain-ready gear when precipitation chance exceeds 50%', () => {
-    const plan = planDay(ALL, day(1, ['sightseeing'], RAINY_MILD), ctx);
-    const chosen = plan.outfits[0].itemIds.map((id) => ALL.find((i) => i.id === id)!);
-    expect(chosen.some((i) => i.weatherTags.includes('rain-ready'))).toBe(true);
-    expect(plan.outfits[0].itemIds).toContain(closet.rainJacket.id);
-    expect(plan.outfits[0].rationale).toMatch(/80% chance of rain/);
+    const o = first({ day: day(1, ['sightseeing'], RAINY_MILD) });
+    expect(o.itemIds).toContain(closet.rainJacket.id);
+    expect(o.rationale).toMatch(/80% chance of rain/);
   });
 
   it('does not require rain gear at exactly 50%', () => {
-    const plan = planDay(ALL, day(1, ['sightseeing'], { high: 30, low: 22, precipChance: 50 }), ctx);
-    expect(plan.outfits[0].itemIds).not.toContain(closet.rainJacket.id);
+    expect(first({ day: day(1, ['sightseeing'], { high: 30, low: 22, precipChance: 50 }) }).itemIds).not.toContain(closet.rainJacket.id);
   });
 
-  it('matches formality to activities', () => {
-    const plan = planDay(ALL, day(1, ['business'], { high: 20, low: 14, precipChance: 0 }), ctx);
-    expect(names(plan.outfits[0].itemIds)).toEqual(expect.arrayContaining(['Oxford', 'Trousers', 'Loafers']));
-  });
-
-  it('splits a day with hiking and dinner into two outfits', () => {
-    const plan = planDay(ALL, day(1, ['hiking', 'dinner out'], { high: 22, low: 14, precipChance: 0 }), ctx);
-    expect(plan.outfits).toHaveLength(2);
-    expect(plan.outfits[0].label).toMatch(/^Active/);
-    expect(plan.outfits[0].itemIds).toContain(closet.boots.id);
-    expect(plan.outfits[1].label).toMatch(/^Evening/);
-    expect(plan.outfits[1].itemIds).not.toContain(closet.boots.id);
-    expect(plan.outfits.every((o) => o.selected)).toBe(true);
+  it('matches formality to the activities the outfit is for', () => {
+    const d = day(1, ['hiking', 'business'], { high: 20, low: 14, precipChance: 0 });
+    expect(names(first({ day: d, activities: ['business'] }).itemIds)).toEqual(expect.arrayContaining(['Oxford', 'Trousers', 'Loafers']));
+    expect(first({ day: d, activities: ['hiking'] }).itemIds).toContain(closet.boots.id);
   });
 
   it('includes swimwear for the beach', () => {
-    const plan = planDay(ALL, day(1, ['beach'], HOT), ctx);
-    expect(plan.outfits[0].itemIds).toContain(closet.trunks.id);
-    expect(plan.outfits[0].itemIds).toContain(closet.sandals.id);
+    const ids = first({ day: day(1, ['beach'], HOT) }).itemIds;
+    expect(ids).toContain(closet.trunks.id);
+    expect(ids).toContain(closet.sandals.id);
   });
 
-  it('offers a distinct, unselected alternative on single-occasion days', () => {
-    const plan = planDay(ALL, day(1, ['sightseeing'], HOT), ctx);
-    expect(plan.outfits).toHaveLength(2);
-    expect(plan.outfits[1].label).toBe('Alternative');
-    expect(plan.outfits[1].selected).toBe(false);
-    expect(plan.outfits[1].itemIds).not.toEqual(plan.outfits[0].itemIds);
+  it('returns two distinct options', () => {
+    const opts = suggestOptions({ items: ALL, day: day(1, ['sightseeing'], HOT) }, 2);
+    expect(opts).toHaveLength(2);
+    expect([...opts[0].itemIds].sort()).not.toEqual([...opts[1].itemIds].sort());
   });
 
-  it('always includes a non-empty rationale', () => {
-    const plan = planDay(ALL, day(1, ['sightseeing']), ctx);
-    expect(plan.outfits[0].rationale).toMatch(/activities only/);
+  it('always includes a rationale', () => {
+    expect(first({ day: day(1, ['sightseeing']) }).rationale).toMatch(/activities only/);
+  });
+
+  it('avoids items with no clean wears left, and flags it when unavoidable', () => {
+    const d = day(2, ['sightseeing'], HOT);
+    // Shorts (capacity 3) already worn 3 times.
+    const used = new Map([[closet.shorts.id, 3]]);
+    expect(first({ day: d, usage: used }).itemIds).not.toContain(closet.shorts.id);
+
+    const onlyShorts = ALL.filter((i) => i.category !== 'bottom');
+    const o = first({ day: d, items: [...onlyShorts, closet.shorts], usage: used });
+    expect(o.itemIds).toContain(closet.shorts.id);
+    expect(o.gaps.join(' ')).toMatch(/No clean shorts left/);
   });
 });
 
@@ -130,71 +138,83 @@ describe('locks', () => {
   it('keeps a locked item and never pairs it with a conflicting item', () => {
     const dress = item({ name: 'Sundress', category: 'dress', warmth: 1, weatherTags: ['hot'], activities: ['sightseeing'] });
     const items = [...ALL, dress];
-    const plan = planDay(items, day(1, ['sightseeing'], COLD), { ...ctx, locks: [[dress.id]] });
-    const ids = plan.outfits[0].itemIds;
+    const ids = suggestOptions({ items, day: day(1, ['sightseeing'], COLD), locked: [dress.id] })[0].itemIds;
     expect(ids).toContain(dress.id);
-    const cats = ids.map((id) => items.find((i) => i.id === id)!.category);
+    const cats = ids.map((id: number) => items.find((i) => i.id === id)!.category);
     expect(cats).not.toContain('top');
     expect(cats).not.toContain('bottom');
-    expect(plan.outfits[0].lockedItemIds).toEqual([dress.id]);
   });
 
-  it('keeps locked items on regenerate with a different seed', () => {
-    const locks = [[closet.sweater.id]];
+  it('keeps locked items in every option and seed', () => {
     for (const seed of [1, 2, 3, 99]) {
-      const plan = planDay(ALL, day(1, ['sightseeing'], HOT), { ...ctx, seed, locks });
-      expect(plan.outfits[0].itemIds).toContain(closet.sweater.id);
-      expect(plan.outfits[0].itemIds).not.toContain(closet.tee.id);
-      expect(plan.outfits[0].itemIds).not.toContain(closet.linen.id);
+      for (const o of suggestOptions({ items: ALL, day: day(1, ['sightseeing'], HOT), seed, locked: [closet.sweater.id] })) {
+        expect(o.itemIds).toContain(closet.sweater.id);
+        expect(o.itemIds).not.toContain(closet.tee.id);
+      }
     }
   });
 });
 
 describe('planTrip', () => {
+  it('makes one outfit per occasion', () => {
+    const [plan] = planTrip(ALL, [day(1, ['hiking', 'dinner out'], { high: 22, low: 14, precipChance: 0 })]);
+    expect(plan.outfits.map((o) => o.label)).toEqual(['Active: hiking', 'Evening: dinner out']);
+    expect(plan.outfits[0].itemIds).toContain(closet.boots.id);
+    expect(plan.outfits[1].itemIds).not.toContain(closet.boots.id);
+  });
+
   it('never repeats the exact same outfit on consecutive days', () => {
-    const days = [1, 2, 3, 4, 5].map((i) => day(i, ['sightseeing'], HOT));
-    const plans = planTrip(ALL, days);
+    const plans = planTrip(ALL, [1, 2, 3, 4, 5].map((i) => day(i, ['sightseeing'], HOT)));
     for (let i = 1; i < plans.length; i++) {
-      const prev = [...plans[i - 1].outfits[0].itemIds].sort();
-      const cur = [...plans[i].outfits[0].itemIds].sort();
-      expect(cur).not.toEqual(prev);
+      expect([...plans[i].outfits[0].itemIds].sort()).not.toEqual([...plans[i - 1].outfits[0].itemIds].sort());
     }
   });
 
-  it('prefers reusing items across days to keep packing small', () => {
-    const days = [1, 2, 3, 4, 5].map((i) => day(i, ['sightseeing'], HOT));
-    const plans = planTrip(ALL, days);
-    const selected = plans.flatMap((p) => p.outfits.filter((o) => o.selected));
-    const stats = packingStats(selected);
-    expect(stats.outfitCount).toBe(5);
-    expect(stats.itemCount).toBeLessThanOrEqual(7);
-    expect(stats.wearsPerItem).toBeGreaterThan(2);
+  it('reuses items but stays within copies × wears before washing', () => {
+    const plans = planTrip(ALL, [1, 2, 3, 4, 5].map((i) => day(i, ['sightseeing'], HOT)));
+    const outfits = plans.flatMap((p) => p.outfits);
+    expect(capacityGaps(ALL, outfits)).toEqual([]);
+    const wears = countWears(outfits);
+    for (const [id, n] of wears) expect(n).toBeLessThanOrEqual(capacity(ALL.find((i) => i.id === id)!));
+    expect(packingStats(ALL, outfits).wearsPerPiece).toBeGreaterThan(1);
+  });
+
+  it('respects wears already planned elsewhere', () => {
+    const usage = new Map([[closet.tee.id, 3]]);
+    const [plan] = planTrip(ALL, [day(1, ['sightseeing'], HOT)], { usage });
+    expect(plan.outfits[0].itemIds).not.toContain(closet.tee.id);
   });
 
   it('is deterministic for a given seed', () => {
     const days = [1, 2, 3].map((i) => day(i, ['sightseeing', 'dinner out'], RAINY_MILD));
     expect(planTrip(ALL, days, { seed: 7 })).toEqual(planTrip(ALL, days, { seed: 7 }));
   });
+
+  it('has a single target for single-occasion days', () => {
+    expect(outfitTargets(['sightseeing', 'travel day'])).toHaveLength(1);
+  });
 });
 
 describe('gaps', () => {
   it('flags missing rain gear', () => {
     const items = ALL.filter((i) => !i.weatherTags.includes('rain-ready'));
-    const d = day(3, ['sightseeing'], RAINY_MILD);
-    const plan = planDay(items, d, ctx);
-    expect(plan.gaps.join(' ')).toMatch(/No rain-ready outerwear or shoes for Day 3/);
+    const o = suggestOptions({ items, day: day(3, ['sightseeing'], RAINY_MILD) })[0];
+    expect(o.gaps.join(' ')).toMatch(/No rain-ready outerwear or shoes for Day 3/);
   });
 
   it('flags missing warm outerwear and swimwear', () => {
     const items = ALL.filter((i) => i.id !== closet.puffer.id && i.category !== 'swimwear');
-    expect(planDay(items, day(2, ['sightseeing'], COLD), ctx).gaps.join(' ')).toMatch(/No outerwear warm enough for Day 2/);
-    expect(planDay(items, day(1, ['beach'], HOT), ctx).gaps.join(' ')).toMatch(/No swimwear/);
+    expect(suggestOptions({ items, day: day(2, ['sightseeing'], COLD) })[0].gaps.join(' ')).toMatch(/No outerwear warm enough for Day 2/);
+    expect(suggestOptions({ items, day: day(1, ['beach'], HOT) })[0].gaps.join(' ')).toMatch(/No swimwear/);
   });
 
   it('reports no gaps for a well-covered day', () => {
-    const d = day(1, ['sightseeing'], HOT);
-    const plan = planDay(ALL, d, ctx);
-    expect(detectGaps(ALL, d, plan.outfits, outfitTargets(d.activities))).toEqual([]);
+    expect(first({ day: day(1, ['sightseeing'], HOT) }).gaps).toEqual([]);
+  });
+
+  it('reports items planned beyond their clean wears', () => {
+    const gaps = capacityGaps(ALL, [{ itemIds: [closet.oxford.id] }, { itemIds: [closet.oxford.id] }]);
+    expect(gaps[0]).toMatch(/Oxford: planned for 2 wears, but 1 owned × 1 wear before washing = 1/);
   });
 });
 
@@ -202,16 +222,15 @@ describe('swapCandidates', () => {
   it('offers same-slot items not already in the outfit, best first', () => {
     const d = day(1, ['sightseeing'], RAINY_MILD);
     const outfit = [closet.tee.id, closet.shorts.id, closet.sneakers.id];
-    const cands = swapCandidates(ALL, d, outfitTargets(d.activities)[0].group, outfit, closet.sneakers.id);
+    const cands = swapCandidates(ALL, d, d.activities, outfit, closet.sneakers.id);
     expect(cands.every((c) => c.category === 'shoes')).toBe(true);
     expect(cands.map((c) => c.id)).not.toContain(closet.sneakers.id);
-    expect(cands[0].id).toBe(closet.boots.id); // rain-ready wins on a wet day
+    expect(cands[0].id).toBe(closet.boots.id);
   });
 
   it('assigns activewear to whichever of top/bottom is free', () => {
     const leggings = item({ name: 'Leggings', category: 'activewear' });
-    const slots = assignSlots([closet.tee, leggings]);
-    expect(slots.get(leggings.id)).toBe('bottom');
+    expect(assignSlots([closet.tee, leggings]).get(leggings.id)).toBe('bottom');
   });
 });
 
@@ -220,8 +239,32 @@ describe('packing helpers', () => {
     expect(dedupeItemIds([{ itemIds: [1, 2, 3] }, { itemIds: [2, 3, 4] }])).toEqual([1, 2, 3, 4]);
   });
 
-  it('computes efficiency', () => {
-    expect(packingStats([{ itemIds: [1, 2] }, { itemIds: [1, 3] }])).toEqual({ outfitCount: 2, itemCount: 3, wearsPerItem: 1.3 });
+  it('packs the right number of copies and reports shortfalls', () => {
+    const socks = { id: 1, quantity: 5, wearCount: 1 };
+    const jeans = { id: 2, quantity: 1, wearCount: 3 };
+    const outfits = Array.from({ length: 6 }, () => ({ itemIds: [1, 2] }));
+    const lines = packLines([socks, jeans], outfits);
+    expect(lines.get(1)).toEqual({ itemId: 1, wears: 6, copies: 5, shortfall: 1 });
+    expect(lines.get(2)).toEqual({ itemId: 2, wears: 6, copies: 1, shortfall: 3 });
+  });
+
+  it('computes stats over physical pieces and ignores empty outfits', () => {
+    const stock = [
+      { id: 1, quantity: 2, wearCount: 1 },
+      { id: 2, quantity: 1, wearCount: 3 },
+    ];
+    expect(packingStats(stock, [{ itemIds: [1, 2] }, { itemIds: [1, 2] }, { itemIds: [] }])).toEqual({
+      outfitCount: 2,
+      itemCount: 2,
+      pieceCount: 3,
+      wearsPerPiece: 1.3,
+    });
+  });
+
+  it('computes general item quantities per day or fixed', () => {
+    expect(generalQty({ perDay: 1 }, 5)).toBe(5);
+    expect(generalQty({ perDay: 2 }, 5)).toBe(10);
+    expect(generalQty({ qty: 1 }, 5)).toBe(1);
   });
 
   it('diffs packing rows without touching existing ones', () => {

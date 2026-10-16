@@ -1,11 +1,24 @@
 import { db, deleteClosetItem } from './schema';
 import type { ClosetItem } from './types';
 
-type SeedItem = Omit<ClosetItem, 'id' | 'isSample' | 'createdAt' | 'updatedAt'>;
+type SeedItem = Omit<ClosetItem, 'id' | 'isSample' | 'createdAt' | 'updatedAt' | 'quantity' | 'wearCount'> &
+  Partial<Pick<ClosetItem, 'quantity' | 'wearCount'>>;
+
+/** Typical wears before washing, by category, for the sample wardrobe. */
+const SAMPLE_WEARS: Record<ClosetItem['category'], number> = {
+  top: 1,
+  bottom: 3,
+  dress: 1,
+  outerwear: 10,
+  shoes: 10,
+  accessory: 10,
+  swimwear: 3,
+  activewear: 2,
+};
 
 export const SAMPLE_WARDROBE: SeedItem[] = [
-  { name: 'White linen shirt', category: 'top', color: 'white', warmth: 1, formality: 'smart casual', weatherTags: ['hot', 'sun'], activities: ['sightseeing', 'dinner out', 'beach'] },
-  { name: 'Navy crew tee', category: 'top', color: 'navy', warmth: 1, formality: 'casual', weatherTags: ['hot', 'sun'], activities: ['sightseeing', 'hiking', 'travel day', 'lounging'] },
+  { name: 'White linen shirt', quantity: 2, category: 'top', color: 'white', warmth: 1, formality: 'smart casual', weatherTags: ['hot', 'sun'], activities: ['sightseeing', 'dinner out', 'beach'] },
+  { name: 'Navy crew tee', quantity: 3, category: 'top', color: 'navy', warmth: 1, formality: 'casual', weatherTags: ['hot', 'sun'], activities: ['sightseeing', 'hiking', 'travel day', 'lounging'] },
   { name: 'Grey merino sweater', category: 'top', color: 'grey', warmth: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out', 'travel day', 'business'] },
   { name: 'Oxford button-down', category: 'top', color: 'light blue', warmth: 2, formality: 'formal', weatherTags: [], activities: ['business', 'dinner out'] },
   { name: 'Dark jeans', category: 'bottom', color: 'indigo', warmth: 3, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out', 'travel day', 'nightlife'] },
@@ -27,7 +40,14 @@ export const SAMPLE_WARDROBE: SeedItem[] = [
 export async function seedSampleWardrobe(): Promise<void> {
   const now = Date.now();
   await db.closetItems.bulkAdd(
-    SAMPLE_WARDROBE.map((item) => ({ ...item, isSample: true, createdAt: now, updatedAt: now })),
+    SAMPLE_WARDROBE.map((item) => ({
+      quantity: 1,
+      wearCount: SAMPLE_WEARS[item.category],
+      ...item,
+      isSample: true,
+      createdAt: now,
+      updatedAt: now,
+    })),
   );
 }
 

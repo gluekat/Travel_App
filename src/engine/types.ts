@@ -14,6 +14,10 @@ export interface EngineItem {
   formality: Formality;
   weatherTags: WeatherTag[];
   activities: Activity[];
+  /** Copies owned. */
+  quantity: number;
+  /** Wears per copy before washing. */
+  wearCount: number;
 }
 
 export interface EngineWeather {
@@ -33,27 +37,45 @@ export interface EngineDay {
 
 export interface SuggestedOutfit {
   label: string;
+  activities: Activity[];
   itemIds: number[];
-  lockedItemIds: number[];
   rationale: string;
-  selected: boolean;
+  /** Problems this suggestion couldn't solve with the closet. */
+  gaps: string[];
+}
+
+export interface SuggestRequest {
+  items: EngineItem[];
+  day: EngineDay;
+  /** What the outfit is for (defaults to the day's activities). */
+  activities?: Activity[];
+  /** Items that must stay in the outfit. */
+  locked?: number[];
+  /** Wears already planned for each item in the rest of the trip. */
+  usage?: Map<number, number>;
+  /** Outfits worn the previous day, to avoid exact repeats. */
+  previousOutfits?: number[][];
+  /** Changes tie-breaking so "show other options" differs but is reproducible. */
+  seed?: number;
+  /** Format a °C value for messages; defaults to "12°C". */
+  formatTemp?: (c: number) => string;
 }
 
 export interface DayPlan {
   dayId: number;
   outfits: SuggestedOutfit[];
-  gaps: string[];
 }
 
 export interface PlanOptions {
-  /** Changes tie-breaking so "regenerate" gives a different but reproducible result. */
   seed?: number;
-  /** Locked item ids per day id, per outfit rank. */
-  locks?: Record<number, number[][]>;
-  /** Format a °C value for messages; defaults to "12°C". */
   formatTemp?: (c: number) => string;
+  /** Wears already planned by outfits outside the days being planned. */
+  usage?: Map<number, number>;
 }
 
 export interface OutfitEngine {
+  /** Up to `count` distinct options for one outfit. */
+  suggestOptions(req: SuggestRequest, count?: number): SuggestedOutfit[];
+  /** One outfit per occasion for each day (used by "fill empty days"). */
   planTrip(items: EngineItem[], days: EngineDay[], opts?: PlanOptions): DayPlan[];
 }

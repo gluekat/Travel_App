@@ -21,6 +21,8 @@ const EMPTY: Draft = {
   formality: 'casual',
   weatherTags: [],
   activities: [],
+  quantity: 1,
+  wearCount: 1,
 };
 
 const WARMTH_LABELS = ['', 'Very light', 'Light', 'Medium', 'Warm', 'Very warm'];
@@ -28,8 +30,8 @@ const WARMTH_LABELS = ['', 'Very light', 'Light', 'Medium', 'Warm', 'Very warm']
 export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => void }) {
   const [draft, setDraft] = useState<Draft>(() => {
     if (!item) return EMPTY;
-    const { name, category, color, warmth, formality, weatherTags, activities, photo } = item;
-    return { name, category, color, warmth, formality, weatherTags, activities, photo };
+    const { name, category, color, warmth, formality, weatherTags, activities, photo, quantity = 1, wearCount = 1 } = item;
+    return { name, category, color, warmth, formality, weatherTags, activities, photo, quantity, wearCount };
   });
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -37,7 +39,13 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
     e.preventDefault();
     if (!draft.name.trim()) return;
     const now = Date.now();
-    const clean = { ...draft, name: draft.name.trim(), color: draft.color.trim() };
+    const clean = {
+      ...draft,
+      name: draft.name.trim(),
+      color: draft.color.trim(),
+      quantity: Math.max(1, Math.round(draft.quantity) || 1),
+      wearCount: Math.max(1, Math.round(draft.wearCount) || 1),
+    };
     if (item?.id != null) {
       await db.closetItems.update(item.id, { ...clean, updatedAt: now });
     } else {
@@ -83,6 +91,12 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
               </option>
             ))}
           </select>
+        </Field>
+        <Field label="Quantity owned" hint="Identical copies, e.g. 5 pairs of white socks.">
+          <input type="number" min={1} className={inputClass} value={draft.quantity} onChange={(e) => set('quantity', Number(e.target.value))} />
+        </Field>
+        <Field label="Wears before washing" hint="Tee = 1, jeans = 3, shoes/jacket = many.">
+          <input type="number" min={1} className={inputClass} value={draft.wearCount} onChange={(e) => set('wearCount', Number(e.target.value))} />
         </Field>
       </div>
       <Field label="Weather tags">

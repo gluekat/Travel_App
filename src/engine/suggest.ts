@@ -1,5 +1,5 @@
 /**
- * Rules-based outfit engine (v1). Pure functions only: no React, no Dexie,
+ * Rules-based outfit engine (v2). Pure functions only: no React, no Dexie,
  * no network. See ./types.ts for the swappable contract.
  */
 import type { Activity } from '../db/types';
@@ -7,6 +7,7 @@ import {
   CATEGORY_SLOTS,
   FORMALITY_RANK,
   SLOT_CONFLICTS,
+  capacity,
   groupOccasions,
   isRainy,
   makeJitter,
@@ -18,7 +19,7 @@ import {
   type ScoreContext,
   type Slot,
 } from './rules';
-import type { DayPlan, EngineDay, EngineItem, OutfitEngine, PlanOptions, SuggestedOutfit } from './types';
+import type { DayPlan, EngineDay, EngineItem, OutfitEngine, PlanOptions, SuggestRequest, SuggestedOutfit } from './types';
 
 const SLOT_ORDER: Slot[] = ['outerwear', 'top', 'dress', 'swimwear', 'bottom', 'shoes', 'accessory'];
 const ACCESSORY_MIN_SCORE = 2.5;
@@ -26,14 +27,7 @@ const ACCESSORY_MIN_SCORE = 2.5;
 const defaultFormat = (c: number) => `${Math.round(c)}°C`;
 
 // ---------------------------------------------------------------------------
-// Occasion per outfit rank
-
-export interface OutfitTarget {
-  label: string;
-  group: OccasionGroup;
-  /** True for the "alternative" second outfit on single-occasion days. */
-  alternative: boolean;
-}
+// Occasions
 
 const OCCASION_LABEL: Record<Occasion, string> = {
   active: 'Active',
@@ -42,26 +36,25 @@ const OCCASION_LABEL: Record<Occasion, string> = {
   dressy: 'Evening',
 };
 
-/** Decide what each of a day's (max two) outfits is for. */
+export interface OutfitTarget {
+  label: string;
+  group: OccasionGroup;
+}
+
+/** One target per occasion in the day (daytime first, dressy last). */
 export function outfitTargets(activities: Activity[]): OutfitTarget[] {
   const groups = groupOccasions(activities);
-  if (groups.length === 1) {
-    const g = groups[0];
-    return [
-      { label: `Outfit: ${g.activities.join(', ')}`, group: g, alternative: false },
-      { label: 'Alternative', group: g, alternative: true },
-    ];
-  }
-  const [first, ...rest] = groups;
-  const second: OccasionGroup = {
-    occasion: rest[rest.length - 1].occasion,
-    activities: rest.flatMap((g) => g.activities),
-  };
-  return [first, second].map((g) => ({
-    label: `${OCCASION_LABEL[g.occasion]}: ${g.activities.join(', ')}`,
-    group: g,
-    alternative: false,
-  }));
+  if (groups.length === 1) return [{ label: 'Outfit 1', group: groups[0] }];
+  return groups.map((g) => ({ label: `${OCCASION_LABEL[g.occasion]}: ${g.activities.join(', ')}`, group: g }));
+}
+
+/** A single occasion for one outfit covering the given activities. */
+export function occasionFor(activities: Activity[]): OccasionGroup {
+  const groups = groupOccasions(activities);
+  if (groups.length === 1) return groups[0];
+  // One outfit for several occasions: dress for the most demanding one.
+  const dressy = groups.find((g) => g.occasion === 'dressy');
+  return { occasion: dressy ? 'dressy' : groups[0].occasion, activities: groups.flatMap((g) => g.activities) };
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +64,6 @@ export function outfitTargets(activities: Activity[]): OutfitTarget[] {
 export function assignSlots(items: EngineItem[]): Map<number, Slot> {
   const taken = new Set<Slot>();
   const out = new Map<number, Slot>();
-  // Single-slot categories first so activewear takes whatever is left.
   const sorted = [...items].sort((a, b) => CATEGORY_SLOTS[a.category].length - CATEGORY_SLOTS[b.category].length);
   for (const item of sorted) {
     const slots = CATEGORY_SLOTS[item.category];
@@ -90,7 +82,7 @@ interface BuildContext {
   day: EngineDay;
   group: OccasionGroup;
   locked: number[];
-  reused: Set<number>;
+  usage: Map<number, number>;
   avoid: Set<number>;
   exclude: Set<number>;
   jitter: (id: number) => number;
@@ -98,7 +90,6 @@ interface BuildContext {
 
 interface Built {
   itemIds: number[];
-  slots: Map<number, Slot>;
   score: number;
 }
 
@@ -110,7 +101,7 @@ function scoreContext(ctx: BuildContext, slot: Slot): ScoreContext {
     occasion: ctx.group.occasion,
     activities: ctx.group.activities,
     formality: requiredFormality(ctx.group.activities),
-    reused: ctx.reused,
+    usage: ctx.usage,
     avoid: ctx.avoid,
     jitter: ctx.jitter,
   };
@@ -165,7 +156,7 @@ export function buildOutfit(ctx: BuildContext): Built {
   if (ctx.group.occasion === 'beach' && open('swimwear')) take('swimwear', bestFor(ctx, 'swimwear', used));
   if (open('shoes')) take('shoes', bestFor(ctx, 'shoes', used));
 
-  // Outerwear: needed for warmth, or for rain when the shoes alone aren't rain-ready.
+  // Outerwear: needed for warmth, or for rain.
   const w = ctx.day.weather;
   if (w && open('outerwear')) {
     const needs = warmthNeeds(w);
@@ -187,7 +178,7 @@ export function buildOutfit(ctx: BuildContext): Built {
   const itemIds = [...slots.entries()]
     .sort((a, b) => SLOT_ORDER.indexOf(a[1]) - SLOT_ORDER.indexOf(b[1]))
     .map(([id]) => id);
-  return { itemIds, slots, score };
+  return { itemIds, score };
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +200,7 @@ export function explainOutfit(
   day: EngineDay,
   group: OccasionGroup,
   itemIds: number[],
-  reused: Set<number> = new Set(),
+  usage: Map<number, number> = new Map(),
   formatTemp: (c: number) => string = defaultFormat,
 ): string {
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -225,8 +216,7 @@ export function explainOutfit(
     const outer = chosen.find((i) => i.category === 'outerwear');
     if (needs.outerwearMin != null && outer) parts.push(`${capitalize(outer.name.toLowerCase())} (warmth ${outer.warmth}) for the chill.`);
     else if (needs.band === 'hot' || needs.band === 'warm') {
-      const light = chosen.filter((i) => i.warmth <= 2 && i.category !== 'accessory');
-      if (light.length) parts.push(`Light layers to stay cool.`);
+      if (chosen.some((i) => i.warmth <= 2 && i.category !== 'accessory')) parts.push('Light layers to stay cool.');
     }
     if (isRainy(w)) {
       const rain = chosen.filter((i) => i.weatherTags.includes('rain-ready'));
@@ -241,30 +231,28 @@ export function explainOutfit(
   if (FORMALITY_RANK[formality] > 0) parts.push(`${capitalize(formality)} enough for ${group.activities.filter((a) => ['business', 'dinner out', 'nightlife'].includes(a)).join(' and ')}.`);
   else if (suited.length) parts.push(`Picked for ${group.activities.join(', ')}.`);
 
-  const reusedCount = chosen.filter((i) => reused.has(i.id)).length;
-  if (reusedCount) parts.push(`Reuses ${reusedCount} item${reusedCount > 1 ? 's' : ''} from other days.`);
+  const reused = chosen.filter((i) => (usage.get(i.id) ?? 0) > 0).length;
+  if (reused) parts.push(`Reuses ${reused} item${reused > 1 ? 's' : ''} already in your bag.`);
   return parts.join(' ');
 }
 
-/** Things the closet can't cover for this day. */
+/** Things the closet can't cover for one outfit on this day. */
 export function detectGaps(
   items: EngineItem[],
   day: EngineDay,
-  outfits: { itemIds: number[] }[],
-  targets: OutfitTarget[],
+  itemIds: number[],
+  group: OccasionGroup,
   formatTemp: (c: number) => string = defaultFormat,
 ): string[] {
   const gaps: string[] = [];
   const byId = new Map(items.map((i) => [i.id, i]));
   const label = `Day ${day.index}`;
-  const primary = (outfits[0]?.itemIds ?? []).map((id) => byId.get(id)).filter((i): i is EngineItem => !!i);
-  const has = (cat: string) => primary.some((i) => i.category === cat);
+  const chosen = itemIds.map((id) => byId.get(id)).filter((i): i is EngineItem => !!i);
+  const fills = (slot: Slot) => chosen.some((i) => CATEGORY_SLOTS[i.category].includes(slot));
   const w = day.weather;
 
-  if (!items.some((i) => i.category === 'shoes')) gaps.push('No shoes in your closet.');
-  if (!has('dress') && !(primary.some((i) => CATEGORY_SLOTS[i.category].includes('top')) && primary.some((i) => CATEGORY_SLOTS[i.category].includes('bottom')))) {
-    gaps.push(`Not enough tops/bottoms or dresses for a complete outfit on ${label}.`);
-  }
+  if (!fills('shoes')) gaps.push(items.some((i) => i.category === 'shoes') ? `No shoes in this outfit for ${label}.` : 'No shoes in your closet.');
+  if (!fills('dress') && !(fills('top') && fills('bottom'))) gaps.push(`Missing a top/bottom or dress for a complete outfit on ${label}.`);
 
   if (w) {
     if (isRainy(w)) {
@@ -275,119 +263,139 @@ export function detectGaps(
     }
     const needs = warmthNeeds(w);
     if (needs.outerwearMin != null) {
-      const outer = primary.find((i) => i.category === 'outerwear');
+      const outer = chosen.find((i) => i.category === 'outerwear');
       if (!outer || outer.warmth < needs.outerwearMin) {
         gaps.push(`No outerwear warm enough for ${label} (low ${formatTemp(w.low)}; needs warmth ${needs.outerwearMin}+).`);
       }
     }
   }
 
-  for (const t of targets) {
-    if (t.alternative) continue;
-    const acts = t.group.activities;
-    if (t.group.occasion === 'beach' && !items.some((i) => i.category === 'swimwear')) gaps.push(`No swimwear for the beach on ${label}.`);
-    const req = requiredFormality(acts);
-    if (FORMALITY_RANK[req] > 0) {
-      const enough = (cat: string[]) => items.some((i) => cat.includes(i.category) && FORMALITY_RANK[i.formality] >= FORMALITY_RANK[req]);
-      if (!enough(['top', 'dress']) || !enough(['bottom', 'dress']) || !enough(['shoes'])) {
-        gaps.push(`Not enough ${req} pieces for ${acts.filter((a) => ['business', 'dinner out', 'nightlife'].includes(a)).join(' and ')} on ${label}.`);
-      }
+  const acts = group.activities;
+  if (acts.includes('beach') && !items.some((i) => i.category === 'swimwear')) gaps.push(`No swimwear for the beach on ${label}.`);
+  const req = requiredFormality(acts);
+  if (FORMALITY_RANK[req] > 0) {
+    const enough = (cat: string[]) => items.some((i) => cat.includes(i.category) && FORMALITY_RANK[i.formality] >= FORMALITY_RANK[req]);
+    if (!enough(['top', 'dress']) || !enough(['bottom', 'dress']) || !enough(['shoes'])) {
+      gaps.push(`Not enough ${req} pieces for ${acts.filter((a) => ['business', 'dinner out', 'nightlife'].includes(a)).join(' and ')} on ${label}.`);
     }
-    if (acts.includes('hiking') && !items.some((i) => i.category === 'shoes' && i.activities.includes('hiking'))) {
-      gaps.push(`No hiking-suitable shoes for ${label}.`);
-    }
+  }
+  if (acts.includes('hiking') && !items.some((i) => i.category === 'shoes' && i.activities.includes('hiking'))) {
+    gaps.push(`No hiking-suitable shoes for ${label}.`);
   }
   return [...new Set(gaps)];
 }
 
-// ---------------------------------------------------------------------------
-// Planning a day and a trip
-
-export interface DayContext {
-  /** Item ids worn on other days (encourages reuse). */
-  reused: Set<number>;
-  /** Item ids of the previous day's outfits, to avoid exact repeats. */
-  previousOutfits: number[][];
-  seed: number;
-  /** Locked item ids per outfit rank. */
-  locks?: number[][];
-  formatTemp?: (c: number) => string;
+/** Count planned wears per item across outfits. */
+export function countWears(outfits: { itemIds: number[] }[]): Map<number, number> {
+  const usage = new Map<number, number>();
+  for (const o of outfits) for (const id of o.itemIds) usage.set(id, (usage.get(id) ?? 0) + 1);
+  return usage;
 }
+
+/** Items planned for more wears than copies × wears-before-washing allow. */
+export function capacityGaps(items: EngineItem[], outfits: { itemIds: number[] }[]): string[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const gaps: string[] = [];
+  for (const [id, wears] of countWears(outfits)) {
+    const item = byId.get(id);
+    if (!item || wears <= capacity(item)) continue;
+    gaps.push(
+      `${item.name}: planned for ${wears} wears, but ${item.quantity} owned × ${item.wearCount} wear${item.wearCount > 1 ? 's' : ''} before washing = ${capacity(item)}. Pack more, swap some days, or plan laundry.`,
+    );
+  }
+  return gaps;
+}
+
+// ---------------------------------------------------------------------------
+// Suggesting outfits
 
 const sameSet = (a: number[], b: number[]) => a.length === b.length && a.every((x) => b.includes(x));
 
-export function planDay(items: EngineItem[], day: EngineDay, ctx: DayContext): DayPlan {
-  const jitter = makeJitter(ctx.seed + day.index * 7919);
-  const targets = outfitTargets(day.activities);
-  const outfits: SuggestedOutfit[] = [];
+/** Up to `count` distinct options for a single outfit. */
+export function suggestOptions(req: SuggestRequest, count = 2): SuggestedOutfit[] {
+  const { items, day, locked = [], usage = new Map(), previousOutfits = [], seed = 0, formatTemp } = req;
+  const activities = req.activities?.length ? req.activities : day.activities;
+  const group = occasionFor(activities);
+  const jitter = makeJitter(seed + day.index * 7919);
+  const options: SuggestedOutfit[] = [];
+  const avoid = new Set<number>();
 
-  targets.forEach((target, rank) => {
-    const locked = ctx.locks?.[rank] ?? [];
-    const avoid = new Set<number>(target.alternative && outfits[0] ? outfits[0].itemIds : []);
-    const base: BuildContext = { items, day, group: target.group, locked, reused: ctx.reused, avoid, exclude: new Set(), jitter };
+  for (let n = 0; n < count; n++) {
+    const base: BuildContext = { items, day, group, locked, usage, avoid: new Set(avoid), exclude: new Set(), jitter };
     let built = buildOutfit(base);
     let note = '';
 
-    // Never repeat the exact same outfit as yesterday: swap the cheapest unlocked item.
-    if (ctx.previousOutfits.some((p) => sameSet(p, built.itemIds))) {
+    // Never repeat yesterday's exact outfit: swap the cheapest unlocked item.
+    if (previousOutfits.some((p) => sameSet(p, built.itemIds))) {
       let best: Built | undefined;
       for (const id of built.itemIds) {
         if (locked.includes(id)) continue;
         const alt = buildOutfit({ ...base, exclude: new Set([id]) });
-        if (ctx.previousOutfits.some((p) => sameSet(p, alt.itemIds))) continue;
+        if (previousOutfits.some((p) => sameSet(p, alt.itemIds))) continue;
         if (!best || alt.score > best.score) best = alt;
       }
       if (best) built = best;
       else note = ' Same as the previous day: not enough alternatives in your closet.';
     }
 
-    // Skip an "alternative" that is identical to the primary outfit.
-    if (target.alternative && outfits[0] && sameSet(outfits[0].itemIds, built.itemIds)) return;
-    if (!built.itemIds.length) return;
-
-    outfits.push({
-      label: target.label,
+    if (!built.itemIds.length || options.some((o) => sameSet(o.itemIds, built.itemIds))) break;
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const over = built.itemIds
+      .map((id) => byId.get(id)!)
+      .filter((i) => (usage.get(i.id) ?? 0) + 1 > capacity(i))
+      .map((i) => `No clean ${i.name.toLowerCase()} left: all ${capacity(i)} wear${capacity(i) > 1 ? 's' : ''} (${i.quantity} owned × ${i.wearCount}) are already planned.`);
+    options.push({
+      label: activities.join(', '),
+      activities,
       itemIds: built.itemIds,
-      lockedItemIds: locked.filter((id) => built.itemIds.includes(id)),
-      rationale: explainOutfit(items, day, target.group, built.itemIds, ctx.reused, ctx.formatTemp) + note,
-      selected: !target.alternative,
+      rationale: explainOutfit(items, day, group, built.itemIds, usage, formatTemp) + note,
+      gaps: [...detectGaps(items, day, built.itemIds, group, formatTemp), ...over],
     });
-  });
-
-  return { dayId: day.id, outfits, gaps: detectGaps(items, day, outfits, targets, ctx.formatTemp) };
+    built.itemIds.forEach((id) => !locked.includes(id) && avoid.add(id));
+  }
+  return options;
 }
 
-/** Plan every day of a trip in date order, favouring items already chosen for earlier days. */
+/**
+ * Plan days in date order: one outfit per occasion (e.g. hiking by day,
+ * dinner in the evening), sharing items across days while clean wears remain.
+ */
 export function planTrip(items: EngineItem[], days: EngineDay[], opts: PlanOptions = {}): DayPlan[] {
   const ordered = [...days].sort((a, b) => a.date.localeCompare(b.date));
-  const reused = new Set<number>();
+  const usage = new Map(opts.usage ?? []);
   let previousOutfits: number[][] = [];
-  const plans: DayPlan[] = [];
-  for (const day of ordered) {
-    const plan = planDay(items, day, {
-      reused: new Set(reused),
-      previousOutfits,
-      seed: opts.seed ?? 0,
-      locks: opts.locks?.[day.id],
-      formatTemp: opts.formatTemp,
+  return ordered.map((day) => {
+    const outfits = outfitTargets(day.activities).map((target) => {
+      const [best] = suggestOptions(
+        { items, day, activities: target.group.activities, usage, previousOutfits, seed: opts.seed, formatTemp: opts.formatTemp },
+        1,
+      );
+      const outfit = best ?? { label: target.label, activities: target.group.activities, itemIds: [], rationale: '', gaps: [] };
+      outfit.itemIds.forEach((id) => usage.set(id, (usage.get(id) ?? 0) + 1));
+      return { ...outfit, label: target.label };
     });
-    for (const o of plan.outfits) if (o.selected) o.itemIds.forEach((id) => reused.add(id));
-    previousOutfits = plan.outfits.map((o) => o.itemIds);
-    plans.push(plan);
-  }
-  return plans;
+    previousOutfits = outfits.map((o) => o.itemIds);
+    return { dayId: day.id, outfits };
+  });
 }
 
 /**
  * Items that could replace `itemId` in an outfit: same slot, not already in
- * the outfit, and never conflicting with locked items. Best first.
+ * the outfit, best first for this day (and with clean wears left).
  */
-export function swapCandidates(items: EngineItem[], day: EngineDay, group: OccasionGroup, outfitItemIds: number[], itemId: number): EngineItem[] {
+export function swapCandidates(
+  items: EngineItem[],
+  day: EngineDay,
+  activities: Activity[],
+  outfitItemIds: number[],
+  itemId: number,
+  usage: Map<number, number> = new Map(),
+): EngineItem[] {
   const byId = new Map(items.map((i) => [i.id, i]));
   const outfitItems = outfitItemIds.map((id) => byId.get(id)).filter((i): i is EngineItem => !!i);
   const slot = assignSlots(outfitItems).get(itemId);
   if (!slot) return [];
-  const ctx: BuildContext = { items, day, group, locked: [], reused: new Set(), avoid: new Set(), exclude: new Set(), jitter: () => 0 };
+  const ctx: BuildContext = { items, day, group: occasionFor(activities), locked: [], usage, avoid: new Set(), exclude: new Set(), jitter: () => 0 };
   const sctx = scoreContext(ctx, slot);
   return items
     .filter((i) => !outfitItemIds.includes(i.id) && CATEGORY_SLOTS[i.category].includes(slot))
@@ -396,4 +404,4 @@ export function swapCandidates(items: EngineItem[], day: EngineDay, group: Occas
     .map(({ i }) => i);
 }
 
-export const rulesEngine: OutfitEngine = { planTrip };
+export const rulesEngine: OutfitEngine = { suggestOptions, planTrip };

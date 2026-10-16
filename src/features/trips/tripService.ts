@@ -1,4 +1,5 @@
 import { db } from '../../db/schema';
+import { defaultGeneralItems, emptyOutfit } from '../../db/migrate';
 import type { Activity, Trip } from '../../db/types';
 import { dateRange } from '../../lib/dates';
 import type { Place } from '../../weather/openMeteo';
@@ -10,7 +11,7 @@ export async function createTrip(destination: string, place: Place | undefined, 
   const dates = dateRange(startDate, endDate);
   if (!dates.length) throw new Error('End date must be on or after the start date.');
   if (dates.length > MAX_TRIP_DAYS) throw new Error(`Trips can be at most ${MAX_TRIP_DAYS} days.`);
-  return db.transaction('rw', db.trips, db.tripDays, async () => {
+  return db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems], async () => {
     const tripId = (await db.trips.add({
       destination: destination.trim(),
       placeLabel: place?.label,
@@ -21,7 +22,12 @@ export async function createTrip(destination: string, place: Place | undefined, 
       endDate,
       createdAt: Date.now(),
     })) as number;
-    await db.tripDays.bulkAdd(dates.map((date) => ({ tripId, date, activities: ['sightseeing'] as Activity[] })));
+    const dayIds = (await db.tripDays.bulkAdd(
+      dates.map((date) => ({ tripId, date, activities: ['sightseeing'] as Activity[] })),
+      { allKeys: true },
+    )) as number[];
+    await db.outfits.bulkAdd(dayIds.map((dayId) => emptyOutfit(tripId, dayId)));
+    await db.packingItems.bulkAdd(defaultGeneralItems(tripId));
     return tripId;
   });
 }
@@ -46,7 +52,11 @@ export async function setTripDates(trip: Trip, startDate: string, endDate: strin
     for (const d of drop) await db.outfits.where('tripDayId').equals(d.id!).delete();
     await db.tripDays.bulkDelete(drop.map((d) => d.id!));
     const have = new Set(existing.map((d) => d.date));
-    await db.tripDays.bulkAdd(dates.filter((d) => !have.has(d)).map((date) => ({ tripId, date, activities: ['sightseeing'] as Activity[] })));
+    const added = (await db.tripDays.bulkAdd(
+      dates.filter((d) => !have.has(d)).map((date) => ({ tripId, date, activities: ['sightseeing'] as Activity[] })),
+      { allKeys: true },
+    )) as number[];
+    await db.outfits.bulkAdd(added.map((dayId) => emptyOutfit(tripId, dayId)));
     await db.trips.update(tripId, { startDate, endDate });
   });
   await syncPacking(tripId);

@@ -40,6 +40,10 @@ export interface ClosetItem {
   formality: Formality;
   weatherTags: WeatherTag[];
   activities: Activity[];
+  /** How many identical copies you own (e.g. 5 pairs of white socks). */
+  quantity: number;
+  /** How many times one copy can be worn before it needs washing. */
+  wearCount: number;
   photo?: Blob;
   isSample: boolean;
   createdAt: number;
@@ -80,25 +84,37 @@ export interface TripDay {
   weather?: DayWeather;
 }
 
+/** One outfit the user is wearing on a trip day. A day can have several. */
 export interface Outfit {
   id?: number;
   tripId: number;
   tripDayId: number;
-  rank: number; // 0 = primary suggestion, 1 = second occasion or alternate
-  /** e.g. "Daytime: sightseeing", "Evening: dinner out", "Alternative". */
+  /** Display order within the day. */
+  rank: number;
+  /** e.g. "Outfit 1", "Daytime: sightseeing", "Dinner". */
   label: string;
+  /** Activities this outfit is for; undefined = all of the day's activities. */
+  activities?: Activity[];
   itemIds: number[];
+  /** Items kept when asking for a new suggestion. */
   lockedItemIds: number[];
+  /** "Why" text from the last applied suggestion; empty once edited by hand. */
   rationale: string;
-  /** Selected outfits feed the packing list. */
-  selected: boolean;
 }
 
+/**
+ * A packing-list row. Either a closet item (itemId; the number of copies is
+ * derived from the outfits) or a general item (customLabel + quantity).
+ */
 export interface PackingItem {
   id?: number;
   tripId: number;
   itemId?: number;
   customLabel?: string;
+  /** General items: fixed quantity (ignored when perDay is set). */
+  qty?: number;
+  /** General items: quantity per trip day, e.g. underwear = 1 per day. */
+  perDay?: number;
   packed: boolean;
 }
 
