@@ -63,6 +63,17 @@ Browser storage is still deleted when you **clear browser data**. To survive tha
 
 This uses the browser's File System Access API (`src/storage/fileSync.ts`), which Safari, Firefox and mobile browsers don't offer.
 
+### Desktop app (Windows, macOS, Linux)
+
+The PackWise desktop app is the same app wrapped with [Tauri](https://tauri.app). It saves every change automatically to **`Documents/PackWise/packwise-data.json`**, with no picker and no permission prompts. That folder belongs to you, not a browser, so clearing browser data doesn't touch it, and reinstalling the app reloads your data from it. The app is only allowed to read and write that folder (`src-tauri/capabilities/default.json`), and its content security policy only allows network requests to Open-Meteo.
+
+- **Get installers:** on GitHub, *Actions → Desktop app → Run workflow*. Each run attaches Windows (`.msi` / `.exe`), macOS (`.dmg`, Apple Silicon and Intel) and Linux (`.deb`, `.rpm`, `.AppImage`) builds as artifacts. Pushing a tag like `v0.2.0` also creates a draft release with them.
+- The installers are not code-signed, so Windows SmartScreen and macOS Gatekeeper will warn on first launch. On a Mac, right-click → *Open*.
+- **Build locally:** install [Rust](https://rustup.rs) and the [Tauri prerequisites](https://tauri.app/start/prerequisites/), then run `npm run desktop:dev` (live reload) or `npm run desktop:build`.
+- **Move data from the browser:** in the browser, *Export / save a backup*. In the desktop app, *Import backup…*. Or open the browser's linked data file in the desktop app via Import.
+
+Phones: Tauri can also build iOS and Android apps from this project (`npx tauri ios init` / `npx tauri android init`). This needs Xcode with an Apple developer account, or the Android SDK. It hasn't been set up or tested yet. On mobile the data file goes in the app's private storage, which also survives clearing the browser.
+
 ### Everywhere else: backups and reminders
 
 In Safari, Firefox, and on phones and tablets, data lives only in the browser. When you have changes that haven't been backed up for a week, a banner reminds you. **Save a backup** opens the share sheet on phones and tablets (choose *Save to Files*) and downloads the file on computers.
