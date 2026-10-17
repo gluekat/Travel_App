@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import { STORAGE_SUFFIX } from '../lib/channel';
 
 /**
  * Small separate database for sync bookkeeping (the linked file handle,
@@ -12,7 +13,7 @@ interface KV {
 class MetaDB extends Dexie {
   kv!: EntityTable<KV, 'key'>;
   constructor() {
-    super('packwise-meta');
+    super(`packwise-meta${STORAGE_SUFFIX}`);
     this.version(1).stores({ kv: 'key' });
   }
 }

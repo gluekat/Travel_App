@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useRoute } from './lib/router';
+import { IS_DEV_CHANNEL } from './lib/channel';
 import { Icon } from './components/ui';
 import { OfflineBanner } from './components/OfflineBanner';
 import { SyncBanner } from './components/SyncBanner';
@@ -36,6 +37,11 @@ export function App() {
           <a href="#/trips" className="flex items-center gap-2 font-semibold text-teal-800">
             <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="h-7 w-7" />
             PackWise
+            {IS_DEV_CHANNEL && (
+              <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950" title="Development preview: may change or break. Data is kept separate from the stable version.">
+                dev
+              </span>
+            )}
           </a>
           <nav className="flex gap-1">
             {NAV.map((n) => (

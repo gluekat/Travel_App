@@ -11,9 +11,10 @@ import Dexie from 'dexie';
 import { db } from '../db/schema';
 import { exportDatabase, importDatabase, validateBackup } from '../db/backup';
 import { deleteMeta, getMeta, setMeta } from './meta';
+import { STORAGE_SUFFIX } from '../lib/channel';
 import type { DataFileAdapter, FsaFileHandle, FsaWindow, SyncState } from './types';
 
-export const DATA_FILE_NAME = 'packwise-data.json';
+export const DATA_FILE_NAME = `packwise${STORAGE_SUFFIX}-data.json`;
 const WRITE_DELAY_MS = 1500;
 const PICKER_TYPES = [{ description: 'PackWise data', accept: { 'application/json': ['.json'] } }];
 

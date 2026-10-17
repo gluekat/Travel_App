@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import { STORAGE_SUFFIX } from '../lib/channel';
 import { migrateV1toV2, migrateV2toV3, type Tables } from './migrate';
 import type { ClosetItem, Outfit, PackingItem, SavedOutfit, Setting, Trip, TripDay } from './types';
 
@@ -48,7 +49,7 @@ export class PackWiseDB extends Dexie {
   }
 }
 
-export const db = new PackWiseDB();
+export const db = new PackWiseDB(`packwise${STORAGE_SUFFIX}`);
 
 export const TABLE_NAMES = [
   'closetItems',

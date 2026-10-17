@@ -1,7 +1,9 @@
-# Builds PackWise and publishes it to GitHub Pages:
-# https://gluekat.github.io/Travel_App/
-# Runs on every push to the default branch, or manually from the Actions tab.
-# Only the app's static files are published; user data never leaves each visitor's device.
+# Publishes two versions of PackWise to GitHub Pages in one site:
+#   Stable:  https://gluekat.github.io/Travel_App/      (built from the `release` branch)
+#   Dev:     https://gluekat.github.io/Travel_App/dev/  (built from the default branch)
+# Runs on every push to the default branch, when `release` changes (via
+# release-deploy.yml / promote.yml), or manually from the Actions tab.
+# Only the apps' static files are published; user data never leaves each visitor's device.
 name: Deploy to GitHub Pages
 
 on:
@@ -14,7 +16,6 @@ permissions:
   pages: write
   id-token: write
 
-# One deployment at a time; a newer push replaces a queued one.
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -23,21 +24,56 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the development branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: dev-src
+
+      - name: Check out the release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release
+          path: stable-src
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm test
-      - name: Build for the /Travel_App/ sub-path
-        run: npm run build
+          cache-dependency-path: |
+            dev-src/package-lock.json
+            stable-src/package-lock.json
+
+      - name: Test and build stable (/Travel_App/)
+        working-directory: stable-src
+        run: |
+          npm ci
+          npm test
+          npm run build
         env:
           VITE_BASE: /Travel_App/
+
+      - name: Test and build dev preview (/Travel_App/dev/)
+        working-directory: dev-src
+        run: |
+          npm ci
+          npm test
+          npm run build
+        env:
+          VITE_BASE: /Travel_App/dev/
+          VITE_CHANNEL: dev
+
+      - name: Combine into one site
+        run: |
+          mkdir -p site/dev
+          cp -r stable-src/dist/. site/
+          cp -r dev-src/dist/. site/dev/
+          echo "stable: $(git -C stable-src rev-parse --short HEAD)  dev: $(git -C dev-src rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
 
   deploy:
     needs: build

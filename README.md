@@ -25,13 +25,19 @@ npm run preview    # serve the production build (service worker enabled)
 
 The service worker is only active in the production build (`npm run build && npm run preview`), or when you deploy `dist/` to any static host. HTTPS is required for installation everywhere except `localhost`.
 
-## Live version (GitHub Pages)
+## Live versions (GitHub Pages)
 
-The latest build is published to **https://gluekat.github.io/Travel_App/** on every push to the default branch, by `.github/workflows/pages.yml` (tests → build → deploy). It's handy for sharing the work in progress. Anyone with the link can use the app, and each visitor's closet and trips stay in their own browser. Only the app's files are hosted.
+| Version | URL | Built from | Updates |
+| --- | --- | --- | --- |
+| **Stable** | https://gluekat.github.io/Travel_App/ | `release` branch | only when you promote |
+| **Dev preview** | https://gluekat.github.io/Travel_App/dev/ | default branch | every push |
 
-One-time setup: *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
+Share the stable link with people trying the app. Use the dev link to preview work in progress. It shows an amber **DEV** badge.
 
-The Pages build sets `VITE_BASE=/Travel_App/` because Pages serves the site from that sub-path. Local, preview and desktop builds use `/`.
+- **Publish a new stable version:** *Actions → Promote dev to stable → Run workflow*. This fast-forwards `release` to the latest dev commit and redeploys. It never rewrites history; if `release` has commits of its own it stops and says so. Pushing to `release` directly (e.g. a hotfix) also redeploys, via `release-deploy.yml`.
+- **How it's built:** `.github/workflows/pages.yml` checks out both branches, runs the tests on each, and builds stable with `VITE_BASE=/Travel_App/` and dev with `VITE_BASE=/Travel_App/dev/ VITE_CHANNEL=dev`. It then publishes them together as one site.
+- **Separate data:** both versions share one web address, so the dev build uses its own storage (`packwise-dev` databases, `packwise-dev-data.json`). A newer dev version can never change or break the data of the stable one. They also install as separate apps ("PackWise" and "PackWise dev") and have separate offline caches.
+- One-time setup (already done): *Settings → Pages → Source: **GitHub Actions***.
 
 ## Installing the app (PWA)
 
