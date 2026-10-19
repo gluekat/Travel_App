@@ -10,6 +10,11 @@ PackWise is a local-first travel app that picks and packs outfits for a trip fro
 - **Packing Checklist:** general items for the whole trip (Underwear and Socks at 1 per day, Jacket, Toiletries, plus your own), then clothes grouped by category with the number of copies to pack. Checkboxes persist, and there's a mix-and-match stat and a print view.
 - **Works offline:** it installs as a PWA, and everything is stored in your browser.
 
+## Documentation
+
+- **[User Manual](docs/USER_MANUAL.md)**: how to use PackWise, for end users.
+- **[Development Documentation](docs/DEVELOPMENT.md)**: architecture, data model, privacy, engine rules, testing, release process, known limitations. For auditors and developers.
+
 ## Setup
 
 Requires Node 20+.
