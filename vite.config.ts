@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import type { Plugin } from 'vite';
+import { WEB_CSP } from './src/lib/csp';
 
 // Served from the site root by default (dev, desktop app). The GitHub Pages
 // build sets VITE_BASE=/Travel_App/ because Pages serves the repo from a sub-path.
@@ -10,9 +12,29 @@ const base = env.VITE_BASE ?? '/';
 // 'dev' for the development preview hosted at /Travel_App/dev/ (see src/lib/channel.ts).
 const isDev = env.VITE_CHANNEL === 'dev';
 
+// Content Security Policy (src/lib/csp.ts) for the web build. GitHub Pages
+// can't send headers, so it is delivered as a <meta> tag. Skipped for the
+// Tauri build (Tauri injects its own CSP) and for the dev server (Vite's live
+// reload needs inline scripts).
+function webSecurityMeta(): Plugin {
+  return {
+    name: 'packwise-web-security-meta',
+    apply: 'build',
+    transformIndexHtml() {
+      if (env.TAURI_ENV_PLATFORM) return [];
+      return [
+        { tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: WEB_CSP }, injectTo: 'head-prepend' },
+        // Don't tell Open-Meteo which page a request came from.
+        { tag: 'meta', attrs: { name: 'referrer', content: 'no-referrer' }, injectTo: 'head-prepend' },
+      ];
+    },
+  };
+}
+
 export default defineConfig({
   base,
   plugins: [
+    webSecurityMeta(),
     react(),
     tailwindcss(),
     VitePWA({

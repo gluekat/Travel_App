@@ -7,7 +7,7 @@
 | **Default (development) branch** | `claude/packwise-travel-app-m5rq30` |
 | **Release branch** | `release` |
 | **Version** | 0.1.0 (pre-release; see `SECURITY.md`) |
-| **Document state** | Matches commit `b6f8bc1` (2026-10-17) |
+| **Document state** | Updated 2026-10-19 (CSP + Dependabot fixes) |
 | **Audience** | Project auditor; future developers |
 
 This document records what PackWise is, how it is built, the decisions behind it, how data and privacy are handled, how it is tested and released, and its known limitations. Section 15 is a checklist for the auditor. File references are relative to the repository root.
@@ -151,6 +151,7 @@ Key points:
 
 ```
 .github/workflows/
+  dependabot.yml       Security updates only; documented glib ignore rule
   pages.yml            Build stable (release) + dev (default branch) → GitHub Pages
   promote.yml          "Promote dev to stable": fast-forward release, redeploy
   release-deploy.yml   Redeploy when release is pushed directly
@@ -180,7 +181,7 @@ src/
     outfits/           OutfitCard, SuggestPanel, outfitService (engine ↔ DB glue)
     packing/           Packing Checklist page
     settings/          Data & privacy page, data-file panel, privacy note
-  lib/                 dates, units (°C/°F), hooks, router, image resize, channel
+  lib/                 dates, units (°C/°F), hooks, router, image resize, channel, csp
   storage/             Data-file sync (browser + desktop adapters), meta DB, reminders
   weather/             Open-Meteo client, fallback chain, WMO codes, persistence
 src-tauri/             Desktop app (Rust shell, config, capabilities, icons)
@@ -269,6 +270,7 @@ Controls in place:
 - The service worker has no runtime caching rules for external requests. Weather is cached by the app in IndexedDB.
 - No fonts, scripts or icons are loaded from CDNs. Icons are inline SVG; fonts are the system stack.
 - **Desktop app:** a Content Security Policy (`src-tauri/tauri.conf.json`) restricts `connect-src` to the three Open-Meteo hosts (plus Tauri IPC). File access is limited by capability scope to `$DOCUMENT/PackWise/**` and `$APPDATA/**` (`src-tauri/capabilities/default.json`).
+- **Web app:** the same restriction is enforced by a Content Security Policy `<meta>` tag injected at build time (`src/lib/csp.ts`, `vite.config.ts`). Only same-origin scripts, styles and workers are allowed (no inline code). Network requests may go only to the three Open-Meteo origins, which are derived from the weather client's own URLs. A `no-referrer` policy stops the page URL being sent to Open-Meteo. A test (`src/lib/csp.test.ts`) keeps the web and desktop policies in step.
 - **Web hosting:** GitHub Pages serves only static files. It receives standard web-server request data (e.g. IP address) when a user loads the app, as any website does. It receives no user content.
 - The privacy statement is shown in-app (*Data & privacy* page, trip screens) and in `README.md`.
 
@@ -442,8 +444,9 @@ Repository setting: *Settings → Pages → Source = GitHub Actions*. With "Depl
 | `src/engine/suggest.test.ts` | 37 | Warmth bands, formality, occasions; heat/cold/rain (>50% vs exactly 50%); beach; distinct options; locks and conflicts; no consecutive repeats; wear capacity and its gaps; favourites (preferred, but never over weather); saved-outfit ranking; swaps; packing copies/shortfall/stats; general quantities |
 | `src/weather/resolveWeather.test.ts` | 12 | Forecast window, Feb 29 shifting, live → historical → cached → missing chain, straddling the window, HTTP errors, **request parameters limited to coords and dates**, source labels, geocoding |
 | `src/storage/fileSync.test.ts` | 15 | Reconcile decision table; file parsing; **"clear browser data → reopen file → everything restored"**; conflict (keep file / keep browser); write errors; reminder rules |
+| `src/lib/csp.test.ts` | 3 | Web CSP allows connections only to self + Open-Meteo; no inline or remote scripts/styles; web and desktop CSP list the same hosts |
 | `src/db/backup.test.ts` | 11 | Export/import round trip incl. photo Blobs; rejects foreign/newer files; weather cache survives failed refresh; manual and multi-outfit editing; fill-empty-days; packing sync keeps checkmarks; saved outfits; custom tag index; **v1 backup import and real v1 database upgrade** |
-| **Total** | **75** | All passing at `b6f8bc1` |
+| **Total** | **78** | All passing |
 
 The network is always mocked; no test calls Open-Meteo.
 
@@ -456,6 +459,7 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 - Data file: create, auto-save, wipe IndexedDB, reopen the file, data restored.
 - Desktop (Linux build run under Xvfb): file created in `Documents/PackWise`; restored after wiping app storage.
 - GitHub Pages sub-path build, offline; stable + dev side by side with separate data.
+- Web CSP (2026-10-19): the full flow (photo upload, geocoding, weather, suggestions, checklist, export download, offline reload) ran with **zero CSP violations**. A deliberate `fetch` to another host was blocked. Open-Meteo received no `Referer` header.
 
 **Not verified by the developer:**
 - Live Open-Meteo responses: the development sandbox blocked those hosts, so a mock with the same response schema was used. The owner has since used the live site.
@@ -470,10 +474,11 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 | Attack surface | Static site; no server, no auth, no user-to-user data. Inputs are the user's own data and Open-Meteo JSON |
 | XSS | React escapes all rendered text; no `dangerouslySetInnerHTML`; no `eval` |
 | Third-party code at runtime | None loaded from CDNs; all dependencies bundled at build time |
-| Dependencies | `npm audit`: 0 vulnerabilities (2026-10-19). Dependabot is enabled; its Cargo update jobs for `glib` are currently failing (§16) |
+| Dependencies | `npm audit`: 0 vulnerabilities (2026-10-19). Dependabot security updates are on, configured by `.github/dependabot.yml` (security only, no version-bump PRs) |
+| `glib` advisory (accepted risk) | GHSA-wrw7-89jp-8q8g / RUSTSEC-2024-0429: unsound `Iterator` impl in `glib::VariantStrIter`, fixed in glib 0.20. PackWise's desktop app pulls glib **0.18.5** through Tauri's Linux GTK 3 stack (`tauri → gtk 0.18 → glib 0.18`). The latest Tauri (2.12.4) still requires it, so no upgrade is possible. **Exposure:** Linux desktop build only (`cargo tree` shows no glib for Windows/macOS targets; the web app has no Rust at all). No crate in the dependency tree calls `VariantStrIter`. **Decision:** ignored in `dependabot.yml`, with a comment, so the scheduled job stops failing. Revisit when Tauri moves to GTK 4 / glib ≥ 0.20. The open alert should be dismissed as *tolerable risk* in *Security → Dependabot* |
 | Import of backup files | Validated (`app`, `version`, table shapes) before replacing data; the user must confirm; newer versions rejected |
 | Desktop | CSP limits network to Open-Meteo; fs capability scoped to the PackWise folder; installers are **not code-signed** |
-| Web CSP | **No CSP header or meta tag** on the GitHub Pages site (Pages can't set headers). Recommended: add a `<meta http-equiv="Content-Security-Policy">` mirroring the desktop policy |
+| Web CSP | ✅ `<meta http-equiv="Content-Security-Policy">` on every web build (stable and dev), mirroring the desktop CSP. Note: `frame-ancestors` can't be set by a meta tag; clickjacking risk is minimal (no account, no actions on other sites) |
 | Secrets | None used by the app. CI uses only the built-in `GITHUB_TOKEN`; workflow permissions are minimal per job |
 | `SECURITY.md` | Contains placeholder contact details (*"email"*, *url*); needs real values |
 
@@ -493,6 +498,8 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 | A8 | Rules as specified | Tables in §9.1; tests in `suggest.test.ts` |
 | A9 | Build reproducible | `npm ci && npm test && npm run build`; CI logs for `pages.yml` |
 | A10 | Desktop permissions | `src-tauri/capabilities/default.json`, `tauri.conf.json` → `security.csp` |
+| A11 | Web CSP present and strict | View page source of the live site (first `<meta>`); `src/lib/csp.test.ts` |
+| A12 | Dependency advisories handled | `npm audit`; `.github/dependabot.yml` ignore rule with rationale; §14 `glib` row |
 
 ---
 
@@ -505,9 +512,9 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 | L3 | Desktop installers unsigned and untested on Windows/macOS | OS warnings on first launch; possible platform issues | Code-signing certificates; manual test pass |
 | L4 | Whole database written to the data file on each change; photos are base64 inside it | Large closets (hundreds of photos) mean multi-MB writes | Store photos as separate files in a linked folder |
 | L5 | Conflict resolution is whole-dataset (no per-record merge) | User picks one side | Per-record timestamps + merge |
-| L6 | No CSP on the web build | Defence-in-depth gap | Add CSP meta tag (§14) |
+| L6 | ~~No CSP on the web build~~ | **Resolved 2026-10-19** | — |
 | L7 | Browser E2E scripts not committed; no component tests | UI regressions are caught only manually | Add Playwright tests to CI; `@testing-library/react` is installed but unused |
-| L8 | Dependabot Cargo jobs for `glib` failing | Noise; possible pending advisory in the GTK stack (Linux desktop) | Investigate; may require a Tauri/wry upgrade |
+| L8 | `glib` 0.18 advisory can't be patched until Tauri adopts GTK 4 | Linux desktop only; vulnerable API unused (§14) | Accepted risk; Dependabot ignore rule; revisit on Tauri upgrades |
 | L9 | `SECURITY.md` placeholders | No working vulnerability contact | Fill in |
 | L10 | Development branch name is session-generated (`claude/…`) | Cosmetic; it is the default branch | Optionally rename to `main` and update `pages.yml`, `promote.yml` |
 | L11 | Historical averages use 3 years and ±3 days | Coarse for unusual seasons | Configurable window |
@@ -529,6 +536,8 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 | 2026-10-16 | `8bf1869` | GitHub Pages replaces the Azure workflow (which failed for lack of credentials and targeted the wrong service type) |
 | 2026-10-17 | — (settings) | Blank-page incident: the legacy "Deploy from a branch" Pages build overwrote the app with raw sources. Fixed by switching Pages Source to GitHub Actions |
 | 2026-10-17 | `b6f8bc1` | Stable (`release`) + dev preview channels; promote workflow |
+| 2026-10-19 | — | Development documentation + user manual |
+| 2026-10-19 | — | Web Content Security Policy + no-referrer; Dependabot configuration and `glib` risk acceptance |
 
 Decisions and the reasons for them:
 - **Hash routing:** static hosting with no rewrites, and simple offline support.

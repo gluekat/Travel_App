@@ -1,0 +1,25 @@
+# Dependabot: security updates only (no routine version-bump PRs).
+# `open-pull-requests-limit: 0` turns off version updates while keeping
+# Dependabot *security* updates active, and lets us set rules for them.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    ignore:
+      # GHSA-wrw7-89jp-8q8g / RUSTSEC-2024-0429: unsound iterator in
+      # glib::VariantStrIter, fixed in glib 0.20. glib 0.18 comes from the GTK 3
+      # bindings (gtk 0.18) that Tauri 2 uses on Linux; no Tauri release allows
+      # glib 0.20 yet, so Dependabot can only fail ("security_update_not_possible").
+      # Exposure: Linux desktop build only (not web, Windows or macOS), and no
+      # crate in the build calls VariantStrIter. Risk assessment: docs/DEVELOPMENT.md §14.
+      # REVISIT when Tauri moves to GTK 4 / glib >= 0.20, then remove this rule.
+      - dependency-name: glib
