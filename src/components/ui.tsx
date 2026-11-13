@@ -140,6 +140,9 @@ const PATHS: Record<string, string> = {
   print: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z',
   alert: 'M12 3l10 18H2zM12 10v5M12 18v.5',
   bag: 'M5 8h14l-1 13H6zM9 8V6a3 3 0 016 0v2',
+  chevronDown: 'M6 9l6 6 6-6',
+  chevronRight: 'M9 6l6 6-6 6',
+  copy: 'M8 4H6a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2h-2M8 4a2 2 0 002 2h4a2 2 0 002-2M8 4a2 2 0 012-2h4a2 2 0 012 2',
 };
 
 export function Icon({ name, className = 'h-4 w-4' }: { name: keyof typeof PATHS | string; className?: string }) {

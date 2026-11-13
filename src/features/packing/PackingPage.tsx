@@ -1,13 +1,49 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
-import type { ClosetItem, PackingItem } from '../../db/types';
+import type { ClosetItem, Outfit, PackingItem, TripDay } from '../../db/types';
 import { generalQty, groupByCategory, packingStats, packLines, type PackLine } from '../../engine/packing';
+import { warmthNeeds, type TempBand } from '../../engine/rules';
 import { dateRange, formatDay } from '../../lib/dates';
 import { ItemThumb } from '../../components/ItemThumb';
 import { Banner, Button, Icon, inputClass } from '../../components/ui';
 import { toEngineItem } from '../outfits/outfitService';
 import { TripTabs } from '../trips/TripTabs';
+
+const COLD_BANDS = new Set<TempBand>(['cold', 'freezing']);
+const HOT_BANDS = new Set<TempBand>(['hot', 'warm']);
+
+/** Item ids whose warmth or weather tags are a poor fit for at least one day they're worn. */
+function weatherMismatches(items: ClosetItem[], outfits: Outfit[], tripDays: TripDay[]): Set<number> {
+  const dayWeather = new Map(tripDays.map((d) => [d.id!, d.weather]));
+  const itemDays = new Map<number, TempBand[]>();
+  for (const outfit of outfits) {
+    const w = dayWeather.get(outfit.tripDayId);
+    if (!w) continue;
+    const band = warmthNeeds(w).band;
+    for (const id of outfit.itemIds) {
+      const list = itemDays.get(id) ?? [];
+      list.push(band);
+      itemDays.set(id, list);
+    }
+  }
+  const result = new Set<number>();
+  for (const item of items) {
+    const bands = itemDays.get(item.id!);
+    if (!bands) continue;
+    for (const band of bands) {
+      const tooHeavy = item.warmth >= 4 && HOT_BANDS.has(band);
+      const tooLight = item.warmth <= 2 && COLD_BANDS.has(band);
+      const hotTagCold = item.weatherTags.includes('hot') && COLD_BANDS.has(band);
+      const coldTagHot = item.weatherTags.includes('cold') && HOT_BANDS.has(band);
+      if (tooHeavy || tooLight || hotTagCold || coldTagHot) {
+        result.add(item.id!);
+        break;
+      }
+    }
+  }
+  return result;
+}
 
 const GENERAL_SUGGESTIONS = ['Phone charger', 'Passport / ID', 'Medications', 'Sunscreen', 'Travel adapter', 'Pajamas'];
 
@@ -112,8 +148,9 @@ export function PackingPage({ tripId }: { tripId: number }) {
   const rows = useLiveQuery(() => db.packingItems.where('tripId').equals(tripId).toArray(), [tripId]);
   const outfits = useLiveQuery(() => db.outfits.where('tripId').equals(tripId).toArray(), [tripId]);
   const closet = useLiveQuery(() => db.closetItems.toArray(), []);
+  const tripDays = useLiveQuery(() => db.tripDays.where('tripId').equals(tripId).toArray(), [tripId]);
 
-  if (!rows || !outfits || !closet || !trip) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (!rows || !outfits || !closet || !trip || !tripDays) return <p className="text-sm text-slate-500">Loading…</p>;
 
   const days = dateRange(trip.startDate, trip.endDate).length;
   const engineItems = closet.map(toEngineItem);
@@ -127,20 +164,22 @@ export function PackingPage({ tripId }: { tripId: number }) {
   const generalCount = general.reduce((n, r) => n + generalQty(r, days), 0);
   const packedCount = rows.filter((r) => r.packed).length;
   const short = clothing.filter((c) => c.line.shortfall > 0);
+  const mismatched = weatherMismatches(closet, outfits, tripDays);
+  const tripTitle = trip.name ?? trip.placeLabel ?? trip.destination;
 
   return (
     <div className="space-y-4">
       <div>
         <a href="#/trips" className="no-print text-sm text-teal-700">← Trips</a>
-        <h1 className="text-xl font-semibold">{trip.placeLabel ?? trip.destination}</h1>
+        <h1 className="text-xl font-semibold">{tripTitle}</h1>
         <p className="text-sm text-slate-600">
-          {formatDay(trip.startDate)} to {formatDay(trip.endDate)} · {days} days
+          {formatDay(trip.startDate)} to {formatDay(trip.endDate)} · {days} day{days !== 1 ? 's' : ''}
         </p>
       </div>
       <TripTabs tripId={tripId} current="packing" />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">
-          Packing Checklist<span className="hidden print:inline">: {trip.placeLabel ?? trip.destination}</span>
+          Packing Checklist<span className="hidden print:inline">: {tripTitle}</span>
         </h2>
         <Button className="no-print" onClick={() => window.print()}>
           <Icon name="print" /> Print
@@ -172,6 +211,11 @@ export function PackingPage({ tripId }: { tripId: number }) {
           {item.wearCount > 1 ? 's' : ''} before washing).
         </Banner>
       ))}
+      {mismatched.size > 0 && (
+        <Banner tone="warn">
+          ⚠️ Some packed items (marked with <Icon name="alert" className="inline h-3.5 w-3.5 text-amber-600" />) may not suit the forecast — warmth or weather tags don't match the temperature on those days. Review outfits or use <strong>Swap</strong> to find better alternatives.
+        </Banner>
+      )}
 
       <GeneralItems tripId={tripId} rows={general} days={days} />
 
@@ -200,6 +244,11 @@ export function PackingPage({ tripId }: { tripId: number }) {
                     {line.wears} wear{line.wears > 1 ? 's' : ''}
                     {line.shortfall > 0 && <span className="text-amber-700"> · short {line.shortfall}</span>}
                   </span>
+                  {mismatched.has(item.id!) && (
+                    <span title="May not suit the forecast for one or more days" className="text-amber-500">
+                      <Icon name="alert" className="h-4 w-4" />
+                    </span>
+                  )}
                 </CheckRow>
               ))}
             </ul>

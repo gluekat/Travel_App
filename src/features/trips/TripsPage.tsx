@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/schema';
+import { db, deleteTrip } from '../../db/schema';
+import type { Trip } from '../../db/types';
 import { addDays, dateRange, formatDay, todayISO } from '../../lib/dates';
 import { navigate } from '../../lib/router';
 import type { Place } from '../../weather/openMeteo';
@@ -68,13 +69,91 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+function tripLabel(t: Trip): string {
+  return t.name ?? t.placeLabel ?? t.destination;
+}
+
+function classify(t: Trip, today: string): 'current' | 'upcoming' | 'past' {
+  if (t.endDate < today) return 'past';
+  if (t.startDate > today) return 'upcoming';
+  return 'current';
+}
+
+function TripCard({ trip, onDelete }: { trip: Trip; onDelete: () => void }) {
+  const days = dateRange(trip.startDate, trip.endDate).length;
+  return (
+    <li className="flex items-stretch gap-0 rounded-xl border border-slate-200 bg-white shadow-sm hover:border-teal-400">
+      <a href={`#/trips/${trip.id}`} className="block min-w-0 flex-1 p-4">
+        <p className="truncate font-semibold">{tripLabel(trip)}</p>
+        <p className="text-sm text-slate-600">
+          {formatDay(trip.startDate)} to {formatDay(trip.endDate)} · {days} day{days !== 1 ? 's' : ''}
+        </p>
+      </a>
+      <button
+        type="button"
+        aria-label="Delete trip"
+        className="rounded-r-xl border-l border-slate-200 px-3 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+        onClick={(e) => {
+          e.preventDefault();
+          onDelete();
+        }}
+      >
+        <Icon name="trash" />
+      </button>
+    </li>
+  );
+}
+
+function TripSection({ title, trips, today }: { title: string; trips: Trip[]; today: string }) {
+  if (trips.length === 0) return null;
+  void today;
+  return (
+    <section className="space-y-2">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {trips.map((t) => (
+          <TripCard
+            key={t.id}
+            trip={t}
+            onDelete={() => {
+              if (confirm(`Delete "${tripLabel(t)}" and its outfits and packing checklist?`)) {
+                void deleteTrip(t.id!);
+              }
+            }}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function TripsPage() {
   const trips = useLiveQuery(() => db.trips.orderBy('startDate').toArray(), []);
   const itemCount = useLiveQuery(() => db.closetItems.count(), []);
   const [creating, setCreating] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+
+  const today = todayISO();
+
+  const current: Trip[] = [];
+  const upcoming: Trip[] = [];
+  const past: Trip[] = [];
+  for (const t of trips ?? []) {
+    const bucket = classify(t, today);
+    if (bucket === 'current') current.push(t);
+    else if (bucket === 'upcoming') upcoming.push(t);
+    else past.push(t);
+  }
+  // Current + upcoming: soonest start date first
+  current.sort((a, b) => a.startDate.localeCompare(b.startDate));
+  upcoming.sort((a, b) => a.startDate.localeCompare(b.startDate));
+  // Past: most recent first
+  past.sort((a, b) => b.startDate.localeCompare(a.startDate));
+
+  const hasActive = current.length + upcoming.length > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Trips</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
@@ -86,23 +165,36 @@ export function TripsPage() {
           Your closet is empty. <a className="font-medium underline" href="#/closet">Add some clothes</a> so PackWise can suggest outfits.
         </Banner>
       )}
-      {trips && trips.length === 0 && (
+
+      {trips !== undefined && !hasActive && past.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">
           No trips yet. Create one to get weather-aware outfit suggestions.
         </div>
       )}
-      <ul className="grid gap-3 sm:grid-cols-2">
-        {trips?.map((t) => (
-          <li key={t.id}>
-            <a href={`#/trips/${t.id}`} className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-teal-400">
-              <p className="font-semibold">{t.placeLabel ?? t.destination}</p>
-              <p className="text-sm text-slate-600">
-                {formatDay(t.startDate)} to {formatDay(t.endDate)} · {dateRange(t.startDate, t.endDate).length} days
-              </p>
-            </a>
-          </li>
-        ))}
-      </ul>
+
+      {trips !== undefined && !hasActive && past.length > 0 && (
+        <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">
+          No current or upcoming trips.
+        </div>
+      )}
+
+      <TripSection title="Current" trips={current} today={today} />
+      <TripSection title="Upcoming" trips={upcoming} today={today} />
+
+      {past.length > 0 && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-900"
+            onClick={() => setShowArchive((v) => !v)}
+          >
+            <Icon name={showArchive ? 'chevronDown' : 'chevronRight'} />
+            {showArchive ? 'Hide' : 'View'} archive ({past.length} past trip{past.length !== 1 ? 's' : ''})
+          </button>
+          {showArchive && <TripSection title="Past trips" trips={past} today={today} />}
+        </div>
+      )}
+
       {creating && (
         <Modal title="New trip" onClose={() => setCreating(false)}>
           <NewTripForm onDone={() => setCreating(false)} />

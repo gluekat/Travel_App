@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
 import type { Trip } from '../../db/types';
-import { dateRange, formatDay, formatTimestamp } from '../../lib/dates';
+import { addDays, dateRange, daysBetween, formatDay, formatTimestamp } from '../../lib/dates';
 import { useOnline, useTempUnit } from '../../lib/hooks';
 import { navigate } from '../../lib/router';
 import { formatTemp } from '../../lib/units';
@@ -16,30 +16,52 @@ import { fillEmptyDays, toEngineItem } from '../outfits/outfitService';
 import { DayCard } from './DayCard';
 import { TripTabs } from './TripTabs';
 import { PlaceSearch } from './PlaceSearch';
-import { MAX_TRIP_DAYS, setTripDates, setTripPlace } from './tripService';
+import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace } from './tripService';
 
 type WeatherState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ok' } | { kind: 'error'; message: string };
 
-function EditTripDialog({ trip, onClose }: { trip: Trip; onClose: () => void }) {
+function tripLabel(t: Trip): string {
+  return t.name ?? t.placeLabel ?? t.destination;
+}
+
+function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClose: () => void; onRefreshWeather: () => void }) {
+  const [name, setName] = useState(trip.name ?? '');
   const [query, setQuery] = useState(trip.destination);
   const [place, setPlace] = useState<Place>();
   const [start, setStart] = useState(trip.startDate);
   const [end, setEnd] = useState(trip.endDate);
   const [error, setError] = useState<string>();
+
   async function save() {
     try {
+      if (name.trim() !== (trip.name ?? '')) {
+        await db.trips.update(trip.id!, { name: name.trim() || undefined });
+      }
+      const locationChanged = !!place;
+      const datesChanged = start !== trip.startDate || end !== trip.endDate;
       if (place) await setTripPlace(trip.id!, place);
-      if (query.trim() !== trip.destination) await db.trips.update(trip.id!, { destination: query.trim() });
-      if (start !== trip.startDate || end !== trip.endDate) await setTripDates(trip, start, end);
+      if (query.trim() !== trip.destination && !place) await db.trips.update(trip.id!, { destination: query.trim() });
+      if (datesChanged) await setTripDates(trip, start, end);
       onClose();
+      if (locationChanged || datesChanged) onRefreshWeather();
     } catch (e) {
       setError((e as Error).message);
     }
   }
+
   const days = dateRange(start, end).length;
   return (
     <Modal title="Edit trip" onClose={onClose}>
       <div className="space-y-4">
+        <Field label="Trip name (optional)" hint={'A personal label, e.g. “Summer holiday”. Leave blank to use the destination.'}>
+          <input
+            type="text"
+            className={inputClass}
+            value={name}
+            placeholder={trip.placeLabel ?? trip.destination}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
         <Field label="Destination" hint={trip.placeLabel ? `Current: ${trip.placeLabel}` : 'No location set yet.'}>
           <PlaceSearch query={query} onQuery={setQuery} selected={place} onSelect={setPlace} />
         </Field>
@@ -51,11 +73,73 @@ function EditTripDialog({ trip, onClose }: { trip: Trip; onClose: () => void }) 
             <input type="date" className={inputClass} value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
           </Field>
         </div>
+        <p className="text-sm text-slate-600">
+          {days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : 'Invalid dates'}
+          {days > MAX_TRIP_DAYS && ` (max ${MAX_TRIP_DAYS})`}
+        </p>
         {error && <Banner tone="error">{error}</Banner>}
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={save} disabled={days < 1 || days > MAX_TRIP_DAYS}>
             Save
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DuplicateTripDialog({ trip, onClose }: { trip: Trip; onClose: () => void }) {
+  const length = daysBetween(trip.startDate, trip.endDate);
+  const defaultStart = addDays(trip.startDate, 7);
+  const [start, setStart] = useState(defaultStart);
+  const [end, setEnd] = useState(addDays(defaultStart, length));
+  const [error, setError] = useState<string>();
+  const [working, setWorking] = useState(false);
+
+  function handleStartChange(val: string) {
+    setStart(val);
+    setEnd(addDays(val, length));
+  }
+
+  const days = dateRange(start, end).length;
+
+  async function create() {
+    setWorking(true);
+    try {
+      const id = await duplicateTrip(trip, start, end);
+      onClose();
+      navigate(`/trips/${id}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <Modal title="Duplicate trip" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Creates a copy of <strong>{tripLabel(trip)}</strong> with the same outfits and activities. Weather will be refreshed for the new dates.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Start date">
+            <input type="date" className={inputClass} value={start} onChange={(e) => handleStartChange(e.target.value)} />
+          </Field>
+          <Field label="End date">
+            <input type="date" className={inputClass} value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
+          </Field>
+        </div>
+        <p className="text-sm text-slate-600">
+          {days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : 'Invalid dates'}
+          {days > MAX_TRIP_DAYS && ` (max ${MAX_TRIP_DAYS})`}
+        </p>
+        {error && <Banner tone="error">{error}</Banner>}
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={create} disabled={days < 1 || days > MAX_TRIP_DAYS || working}>
+            {working ? 'Duplicating…' : 'Duplicate'}
           </Button>
         </div>
       </div>
@@ -72,6 +156,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
   const online = useOnline();
   const [weather, setWeather] = useState<WeatherState>({ kind: 'idle' });
   const [editing, setEditing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [generating, setGenerating] = useState(false);
   const autoFetched = useRef(false);
   const fmt = useCallback((c: number) => formatTemp(c, unit), [unit]);
@@ -120,12 +205,15 @@ export function TripDetail({ tripId }: { tripId: number }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <a href="#/trips" className="text-sm text-teal-700">← Trips</a>
-          <h1 className="text-xl font-semibold">{trip.placeLabel ?? trip.destination}</h1>
+          <h1 className="text-xl font-semibold">{tripLabel(trip)}</h1>
           <p className="text-sm text-slate-600">
-            {formatDay(trip.startDate)} to {formatDay(trip.endDate)} · {days.length} days
+            {formatDay(trip.startDate)} to {formatDay(trip.endDate)} · {days.length} day{days.length !== 1 ? 's' : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setDuplicating(true)} title="Duplicate this trip">
+            <Icon name="copy" /> Duplicate
+          </Button>
           <Button onClick={() => setEditing(true)}>
             <Icon name="edit" /> Edit
           </Button>
@@ -201,7 +289,16 @@ export function TripDetail({ tripId }: { tripId: number }) {
         ))}
       </div>
       <PrivacyNote compact />
-      {editing && <EditTripDialog trip={trip} onClose={() => setEditing(false)} />}
+      {editing && (
+        <EditTripDialog
+          trip={trip}
+          onClose={() => setEditing(false)}
+          onRefreshWeather={() => {
+            autoFetched.current = false;
+          }}
+        />
+      )}
+      {duplicating && <DuplicateTripDialog trip={trip} onClose={() => setDuplicating(false)} />}
     </div>
   );
 }

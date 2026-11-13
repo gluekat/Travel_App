@@ -56,6 +56,8 @@ export interface ClosetItem {
 
 export interface Trip {
   id?: number;
+  /** Optional user-defined name, e.g. "Summer holiday". Falls back to placeLabel ?? destination when absent. */
+  name?: string;
   destination: string;
   /** Display name returned by geocoding, e.g. "Lisbon, Portugal". */
   placeLabel?: string;
