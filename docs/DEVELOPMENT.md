@@ -7,7 +7,7 @@
 | **Default (development) branch** | `claude/packwise-travel-app-m5rq30` |
 | **Release branch** | `release` |
 | **Version** | 0.1.0 (pre-release; see `SECURITY.md`) |
-| **Document state** | Updated 2026-10-19 (CSP + Dependabot fixes) |
+| **Document state** | Updated 2026-11-13 (dependency patching) |
 | **Audience** | Project auditor; future developers |
 
 This document records what PackWise is, how it is built, the decisions behind it, how data and privacy are handled, how it is tested and released, and its known limitations. Section 15 is a checklist for the auditor. File references are relative to the repository root.
@@ -474,7 +474,8 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 | Attack surface | Static site; no server, no auth, no user-to-user data. Inputs are the user's own data and Open-Meteo JSON |
 | XSS | React escapes all rendered text; no `dangerouslySetInnerHTML`; no `eval` |
 | Third-party code at runtime | None loaded from CDNs; all dependencies bundled at build time |
-| Dependencies | `npm audit`: 0 vulnerabilities (2026-10-19). Dependabot security updates are on, configured by `.github/dependabot.yml` (security only, no version-bump PRs) |
+| Dependencies | `npm audit`: 0 high/critical vulnerabilities (2026-11-13, after patching vite, undici, fast-uri, serialize-javascript). 6 moderate/low advisories remain in build-time transitive deps (see below). Dependabot security updates are on, configured by `.github/dependabot.yml` (security only, no version-bump PRs) |
+| `workbox-build` advisories (accepted risk) | GHSA-gcqx-w48m-w2h4 (deepmerge prototype poisoning), GHSA-3g3m-2fjr-6pw4 (glob AbortSignal bypass), GHSA-g3hv-75wg-m249 (minimatch DoS): these packages are pulled in by `workbox-build`, which runs only at **build time** to generate the service worker. None of the vulnerable APIs are called with untrusted input during the build. The only fix available (`npm audit fix --force`) downgrades `vite-plugin-pwa` from 2.x to 1.1.0, which does not support Vite 8 — applying it would require downgrading Vite and re-introducing the high-severity Vite CVEs that were just patched. **Decision:** accepted as build-tool risk. Revisit when `vite-plugin-pwa` releases a version that ships updated `workbox-build` internals |
 | `glib` advisory (accepted risk) | GHSA-wrw7-89jp-8q8g / RUSTSEC-2024-0429: unsound `Iterator` impl in `glib::VariantStrIter`, fixed in glib 0.20. PackWise's desktop app pulls glib **0.18.5** through Tauri's Linux GTK 3 stack (`tauri → gtk 0.18 → glib 0.18`). The latest Tauri (2.12.4) still requires it, so no upgrade is possible. **Exposure:** Linux desktop build only (`cargo tree` shows no glib for Windows/macOS targets; the web app has no Rust at all). No crate in the dependency tree calls `VariantStrIter`. **Decision:** ignored in `dependabot.yml`, with a comment, so the scheduled job stops failing. Revisit when Tauri moves to GTK 4 / glib ≥ 0.20. The open alert should be dismissed as *tolerable risk* in *Security → Dependabot* |
 | Import of backup files | Validated (`app`, `version`, table shapes) before replacing data; the user must confirm; newer versions rejected |
 | Desktop | CSP limits network to Open-Meteo; fs capability scoped to the PackWise folder; installers are **not code-signed** |
@@ -538,6 +539,7 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 | 2026-10-17 | `b6f8bc1` | Stable (`release`) + dev preview channels; promote workflow |
 | 2026-10-19 | — | Development documentation + user manual |
 | 2026-10-19 | — | Web Content Security Policy + no-referrer; Dependabot configuration and `glib` risk acceptance |
+| 2026-11-13 | `e797ee2` | Patched high-severity vulns (vite, undici, fast-uri, serialize-javascript); fixed Vite native-config-loader import warnings; documented workbox-build transitive advisories as accepted build-tool risk |
 
 Decisions and the reasons for them:
 - **Hash routing:** static hosting with no rewrites, and simple offline support.

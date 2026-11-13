@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import type { Plugin } from 'vite';
-import { WEB_CSP } from './src/lib/csp';
+import { WEB_CSP } from './src/lib/csp.ts';
 
 // Served from the site root by default (dev, desktop app). The GitHub Pages
 // build sets VITE_BASE=/Travel_App/ because Pages serves the repo from a sub-path.

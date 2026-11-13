@@ -4,7 +4,7 @@
  * weather client's URLs, so the policy and the code can't drift apart.
  * Mirrors the desktop app's CSP in src-tauri/tauri.conf.json.
  */
-import { ARCHIVE_URL, FORECAST_URL, GEOCODE_URL } from '../weather/openMeteo';
+import { ARCHIVE_URL, FORECAST_URL, GEOCODE_URL } from '../weather/openMeteo.ts';
 
 export const ALLOWED_CONNECT_ORIGINS = [GEOCODE_URL, FORECAST_URL, ARCHIVE_URL].map((u) => new URL(u).origin);
 
