@@ -6,7 +6,10 @@
  */
 import { ARCHIVE_URL, FORECAST_URL, GEOCODE_URL } from '../weather/openMeteo.ts';
 
-export const ALLOWED_CONNECT_ORIGINS = [GEOCODE_URL, FORECAST_URL, ARCHIVE_URL].map((u) => new URL(u).origin);
+export const ALLOWED_CONNECT_ORIGINS = [
+  GEOCODE_URL, FORECAST_URL, ARCHIVE_URL,
+  'https://nominatim.openstreetmap.org', // POI / address search
+].map((u) => new URL(u).origin);
 
 export const WEB_CSP = [
   "default-src 'self'",
