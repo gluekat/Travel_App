@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
-import type { ScheduledActivity, TransportConnection, TransportLeg, TransportMode, Trip, TripDay } from '../../db/types';
-import { formatDay } from '../../lib/dates';
+import type { HomeLocation, ScheduledActivity, TransportConnection, TransportLeg, TransportMode, Trip, TripDay } from '../../db/types';
+import { fmt12h, formatDay, shortLocation } from '../../lib/dates';
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
+import { TimeInput } from '../../components/TimeInput';
+import { LocationInput } from '../../components/LocationInput';
 import { TripTabs } from './TripTabs';
 
 // ─── Form draft types ────────────────────────────────────────────────────────
@@ -18,13 +20,18 @@ type TransportDraft = {
   arrivalDate: string;
   arrivalTime: string;
   fromPoint: string;
+  fromLat: number | undefined;
+  fromLon: number | undefined;
   toPoint: string;
+  toLat: number | undefined;
+  toLon: number | undefined;
   carrier: string;
   identifier: string;
   bookingRef: string;
   distanceMiles: string;
   travelHours: string;
   travelMins: string;
+  distEstimated: boolean;
   connections: ConnDraft[];
   notes: string;
 };
@@ -35,14 +42,59 @@ function emptyConn(): ConnDraft {
   return { point: '', arrive: '', depart: '', identifier: '' };
 }
 
-function emptyTransportDraft(direction: 'outbound' | 'return', trip: Trip): TransportDraft {
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calcDriveEstimate(
+  lat1: number, lon1: number, lat2: number, lon2: number,
+): { distMi: number; h: number; m: number } {
+  const km = haversineKm(lat1, lon1, lat2, lon2) * 1.3; // ~1.3× road factor
+  const distMi = km * 0.621371;
+  const totalMins = Math.round(distMi); // assume avg 60 mph → 1 min per mile
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return { distMi, h, m };
+}
+
+function tripDestPoint(trip: Trip, direction: 'outbound' | 'return'): { label: string; lat?: number; lon?: number } {
+  if (trip.stops && trip.stops.length > 0) {
+    const stop = direction === 'outbound' ? trip.stops[0] : trip.stops[trip.stops.length - 1];
+    return { label: shortLocation(stop.label), lat: stop.lat, lon: stop.lon };
+  }
+  const label = trip.placeLabel ? shortLocation(trip.placeLabel) : trip.destination;
+  return { label, lat: trip.lat, lon: trip.lon };
+}
+
+function emptyTransportDraft(
+  direction: 'outbound' | 'return',
+  trip: Trip,
+  home?: HomeLocation,
+): TransportDraft {
+  const dest = tripDestPoint(trip, direction);
+  const fromPoint = direction === 'outbound' ? (home?.label ?? '') : dest.label;
+  const fromLat = direction === 'outbound' ? home?.lat : dest.lat;
+  const fromLon = direction === 'outbound' ? home?.lon : dest.lon;
+  const toPoint = direction === 'outbound' ? dest.label : (home?.label ?? '');
+  const toLat = direction === 'outbound' ? dest.lat : home?.lat;
+  const toLon = direction === 'outbound' ? dest.lon : home?.lon;
   return {
     direction, mode: 'fly',
-    departureDate: trip.startDate, departureTime: '',
-    arrivalDate: trip.startDate, arrivalTime: '',
-    fromPoint: '', toPoint: '',
+    departureDate: direction === 'outbound' ? trip.startDate : trip.endDate,
+    departureTime: '',
+    arrivalDate: direction === 'outbound' ? trip.startDate : trip.endDate,
+    arrivalTime: '',
+    fromPoint, fromLat, fromLon,
+    toPoint, toLat, toLon,
     carrier: '', identifier: '', bookingRef: '',
     distanceMiles: '', travelHours: '', travelMins: '',
+    distEstimated: false,
     connections: [], notes: '',
   };
 }
@@ -54,10 +106,12 @@ function legToDraft(leg: TransportLeg): TransportDraft {
     direction: leg.direction, mode: leg.mode,
     departureDate: leg.departureDate, departureTime: leg.departureTime ?? '',
     arrivalDate: leg.arrivalDate ?? '', arrivalTime: leg.arrivalTime ?? '',
-    fromPoint: leg.fromPoint ?? '', toPoint: leg.toPoint ?? '',
+    fromPoint: leg.fromPoint ?? '', fromLat: undefined, fromLon: undefined,
+    toPoint: leg.toPoint ?? '', toLat: undefined, toLon: undefined,
     carrier: leg.carrier ?? '', identifier: leg.identifier ?? '', bookingRef: leg.bookingRef ?? '',
     distanceMiles: leg.distanceMiles ? String(leg.distanceMiles) : '',
     travelHours: h ? String(h) : '', travelMins: m ? String(m) : '',
+    distEstimated: false,
     connections: (leg.connections ?? []).map((c) => ({
       point: c.point, arrive: c.arrive ?? '', depart: c.depart ?? '', identifier: c.identifier ?? '',
     })),
@@ -113,11 +167,11 @@ function TransportLegCard({ leg, onEdit, onDelete }: { leg: TransportLeg; onEdit
           <p className="text-sm font-semibold">{icon} {label}</p>
           <p className="mt-0.5 text-sm text-slate-700">
             {formatDay(leg.departureDate)}
-            {leg.departureTime && <span> {leg.departureTime}</span>}
+            {leg.departureTime && <span> {fmt12h(leg.departureTime)}</span>}
             {leg.fromPoint && <span> · {leg.fromPoint}</span>}
             {(leg.arrivalDate || leg.arrivalTime || leg.toPoint) && <span> →</span>}
             {leg.arrivalDate && leg.arrivalDate !== leg.departureDate && <span> {formatDay(leg.arrivalDate)}</span>}
-            {leg.arrivalTime && <span> {leg.arrivalTime}</span>}
+            {leg.arrivalTime && <span> {fmt12h(leg.arrivalTime)}</span>}
             {leg.toPoint && <span> · {leg.toPoint}</span>}
           </p>
           {(leg.carrier || leg.identifier) && (
@@ -128,11 +182,13 @@ function TransportLegCard({ leg, onEdit, onDelete }: { leg: TransportLeg; onEdit
           )}
           {leg.distanceMiles != null && (
             <p className="mt-0.5 text-xs text-slate-500">
-              {leg.distanceMiles} mi{leg.travelTimeMinutes ? ` · ${formatMinutes(leg.travelTimeMinutes)}` : ''}
+              {leg.distanceMiles.toFixed(0)} mi{leg.travelTimeMinutes ? ` · ${formatMinutes(leg.travelTimeMinutes)}` : ''}
             </p>
           )}
           {leg.connections && leg.connections.length > 0 && (
-            <p className="mt-0.5 text-xs text-slate-500">Via: {leg.connections.map((c) => c.point).join(', ')}</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Via: {leg.connections.map((c) => c.point).join(', ')}
+            </p>
           )}
           {leg.notes && <p className="mt-0.5 text-xs italic text-slate-400">{leg.notes}</p>}
         </div>
@@ -147,15 +203,16 @@ function TransportLegCard({ leg, onEdit, onDelete }: { leg: TransportLeg; onEdit
 
 // ─── Transport form modal ─────────────────────────────────────────────────────
 
-function TransportFormModal({ tripId, trip, existing, defaultDirection, onClose }: {
+function TransportFormModal({ tripId, trip, home, existing, defaultDirection, onClose }: {
   tripId: number;
   trip: Trip;
+  home?: HomeLocation;
   existing?: TransportLeg;
   defaultDirection: 'outbound' | 'return';
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<TransportDraft>(
-    existing ? legToDraft(existing) : emptyTransportDraft(defaultDirection, trip),
+    existing ? legToDraft(existing) : emptyTransportDraft(defaultDirection, trip, home),
   );
   const [error, setError] = useState<string>();
 
@@ -168,6 +225,32 @@ function TransportFormModal({ tripId, trip, existing, defaultDirection, onClose 
       ...d,
       connections: d.connections.map((c, j) => (j === i ? { ...c, ...patch } : c)),
     }));
+  }
+
+  function updateFrom(label: string, lat?: number, lon?: number) {
+    const patch: Partial<TransportDraft> = { fromPoint: label, fromLat: lat, fromLon: lon };
+    if (draft.mode === 'drive' && lat !== undefined && lon !== undefined &&
+        draft.toLat !== undefined && draft.toLon !== undefined) {
+      const est = calcDriveEstimate(lat, lon, draft.toLat, draft.toLon);
+      patch.distanceMiles = String(Math.round(est.distMi));
+      patch.travelHours = String(est.h);
+      patch.travelMins = String(est.m);
+      patch.distEstimated = true;
+    }
+    set(patch);
+  }
+
+  function updateTo(label: string, lat?: number, lon?: number) {
+    const patch: Partial<TransportDraft> = { toPoint: label, toLat: lat, toLon: lon };
+    if (draft.mode === 'drive' && lat !== undefined && lon !== undefined &&
+        draft.fromLat !== undefined && draft.fromLon !== undefined) {
+      const est = calcDriveEstimate(draft.fromLat, draft.fromLon, lat, lon);
+      patch.distanceMiles = String(Math.round(est.distMi));
+      patch.travelHours = String(est.h);
+      patch.travelMins = String(est.m);
+      patch.distEstimated = true;
+    }
+    set(patch);
   }
 
   async function save(e: FormEvent) {
@@ -226,23 +309,31 @@ function TransportFormModal({ tripId, trip, existing, defaultDirection, onClose 
             <input type="date" className={inputClass} value={draft.departureDate} onChange={(e) => set({ departureDate: e.target.value })} required />
           </Field>
           <Field label="Departure time">
-            <input type="time" className={inputClass} value={draft.departureTime} onChange={(e) => set({ departureTime: e.target.value })} />
+            <TimeInput value={draft.departureTime} onChange={(v) => set({ departureTime: v })} />
           </Field>
           <Field label="Arrival date">
             <input type="date" className={inputClass} value={draft.arrivalDate} onChange={(e) => set({ arrivalDate: e.target.value })} />
           </Field>
           <Field label="Arrival time">
-            <input type="time" className={inputClass} value={draft.arrivalTime} onChange={(e) => set({ arrivalTime: e.target.value })} />
+            <TimeInput value={draft.arrivalTime} onChange={(v) => set({ arrivalTime: v })} />
           </Field>
         </div>
 
         {/* From / To */}
         <div className="grid grid-cols-2 gap-3">
           <Field label={m === 'fly' ? 'From airport' : m === 'train' ? 'Departure station' : m === 'boat' ? 'Departure port' : 'From'}>
-            <input type="text" className={inputClass} value={draft.fromPoint} placeholder={m === 'fly' ? 'e.g. JFK' : ''} onChange={(e) => set({ fromPoint: e.target.value })} />
+            <LocationInput
+              value={draft.fromPoint}
+              onChange={updateFrom}
+              placeholder={m === 'fly' ? 'e.g. JFK, New York' : m === 'drive' ? 'Starting location' : ''}
+            />
           </Field>
           <Field label={m === 'fly' ? 'To airport' : m === 'train' ? 'Arrival station' : m === 'boat' ? 'Arrival port' : 'To'}>
-            <input type="text" className={inputClass} value={draft.toPoint} placeholder={m === 'fly' ? 'e.g. LHR' : ''} onChange={(e) => set({ toPoint: e.target.value })} />
+            <LocationInput
+              value={draft.toPoint}
+              onChange={updateTo}
+              placeholder={m === 'fly' ? 'e.g. LHR, London' : m === 'drive' ? 'Destination' : ''}
+            />
           </Field>
         </div>
 
@@ -267,18 +358,26 @@ function TransportFormModal({ tripId, trip, existing, defaultDirection, onClose 
         {showDistance && (
           <div className="grid grid-cols-2 gap-3">
             <Field label="Distance (miles)">
-              <input type="number" min={0} className={inputClass} value={draft.distanceMiles} onChange={(e) => set({ distanceMiles: e.target.value })} />
+              <input type="number" min={0} className={inputClass} value={draft.distanceMiles}
+                onChange={(e) => set({ distanceMiles: e.target.value, distEstimated: false })} />
             </Field>
             {showDuration && (
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Travel time</label>
                 <div className="flex gap-2">
-                  <input type="number" min={0} className={`${inputClass} flex-1`} placeholder="hrs" value={draft.travelHours} onChange={(e) => set({ travelHours: e.target.value })} />
-                  <input type="number" min={0} max={59} className={`${inputClass} flex-1`} placeholder="min" value={draft.travelMins} onChange={(e) => set({ travelMins: e.target.value })} />
+                  <input type="number" min={0} className={`${inputClass} flex-1`} placeholder="hrs"
+                    value={draft.travelHours} onChange={(e) => set({ travelHours: e.target.value, distEstimated: false })} />
+                  <input type="number" min={0} max={59} className={`${inputClass} flex-1`} placeholder="min"
+                    value={draft.travelMins} onChange={(e) => set({ travelMins: e.target.value, distEstimated: false })} />
                 </div>
               </div>
             )}
           </div>
+        )}
+        {showDistance && draft.distEstimated && (
+          <p className="text-xs text-slate-400">
+            Estimated from straight-line distance × 1.3 at 60 mph avg. Adjust as needed.
+          </p>
         )}
 
         {/* Connections */}
@@ -295,13 +394,13 @@ function TransportFormModal({ tripId, trip, existing, defaultDirection, onClose 
                   <label className="text-xs text-slate-500">{connPointLabel}</label>
                   <input type="text" className={inputClass} value={conn.point} onChange={(e) => setConn(ci, { point: e.target.value })} />
                 </div>
-                <div className="w-20">
+                <div>
                   <label className="text-xs text-slate-500">Arrive</label>
-                  <input type="time" className={inputClass} value={conn.arrive} onChange={(e) => setConn(ci, { arrive: e.target.value })} />
+                  <TimeInput value={conn.arrive} onChange={(v) => setConn(ci, { arrive: v })} />
                 </div>
-                <div className="w-20">
+                <div>
                   <label className="text-xs text-slate-500">Depart</label>
-                  <input type="time" className={inputClass} value={conn.depart} onChange={(e) => setConn(ci, { depart: e.target.value })} />
+                  <TimeInput value={conn.depart} onChange={(v) => setConn(ci, { depart: v })} />
                 </div>
                 {m !== 'boat' && (
                   <div className="w-28">
@@ -412,10 +511,10 @@ function ActivityFormModal({ tripId, days, existing, defaultDayId, onClose }: {
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Start time" hint="Optional">
-            <input type="time" className={inputClass} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            <TimeInput value={startTime} onChange={setStartTime} />
           </Field>
           <Field label="End time" hint="Optional">
-            <input type="time" className={inputClass} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <TimeInput value={endTime} onChange={setEndTime} />
           </Field>
         </div>
 
@@ -424,8 +523,11 @@ function ActivityFormModal({ tripId, days, existing, defaultDayId, onClose }: {
         </Field>
 
         <Field label="Location" hint="Optional address or place name">
-          <input type="text" className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)}
-            placeholder="e.g. Colosseum, Rome" />
+          <LocationInput
+            value={location}
+            onChange={(label) => setLocation(label)}
+            placeholder="e.g. Colosseum, Rome"
+          />
         </Field>
 
         <Field label="Notes" hint="Optional">
@@ -449,6 +551,13 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
   const days = useLiveQuery(() => db.tripDays.where('tripId').equals(tripId).sortBy('date'), [tripId]);
   const transport = useLiveQuery(() => db.tripTransport.where('tripId').equals(tripId).toArray(), [tripId]);
   const activities = useLiveQuery(() => db.tripActivities.where('tripId').equals(tripId).toArray(), [tripId]);
+  const homeLocation = useLiveQuery(
+    async () => {
+      const row = await db.settings.get('homeLocation');
+      return row ? (row.value as HomeLocation) : null;
+    },
+    [],
+  );
 
   type TransportFormState = { leg?: TransportLeg; direction: 'outbound' | 'return' } | null;
   type ActivityFormState = { activity?: ScheduledActivity; dayId: number } | null;
@@ -533,9 +642,9 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">
-                        {act.startTime && <span className="mr-2 text-slate-500">{act.startTime}</span>}
+                        {act.startTime && <span className="mr-2 text-slate-500">{fmt12h(act.startTime)}</span>}
                         {act.name}
-                        {act.endTime && <span className="ml-1 text-slate-500">– {act.endTime}</span>}
+                        {act.endTime && <span className="ml-1 text-slate-500">– {fmt12h(act.endTime)}</span>}
                         {act.durationMinutes && !act.endTime && (
                           <span className="ml-1 text-xs text-slate-400">({formatMinutes(act.durationMinutes)})</span>
                         )}
@@ -567,6 +676,7 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
         <TransportFormModal
           tripId={tripId}
           trip={trip}
+          home={homeLocation ?? undefined}
           existing={transportForm.leg}
           defaultDirection={transportForm.direction}
           onClose={() => setTransportForm(null)}
