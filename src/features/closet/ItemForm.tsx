@@ -39,6 +39,9 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
     const { name, category, color, warmth, formality, weatherTags, activities, photo, quantity = 1, wearCount = 1, favorite = 0, customTags = [] } = item;
     return { name, category, color, warmth, formality, weatherTags, activities, photo, quantity, wearCount, favorite, customTags };
   });
+  // Track whether the user explicitly changed the photo so we never accidentally
+  // overwrite the stored Blob with undefined when photo wasn't touched.
+  const [photoTouched, setPhotoTouched] = useState(false);
   const knownTags = useLiveQuery(async () => (await db.closetItems.orderBy('customTags').uniqueKeys()) as string[], [], []);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -46,26 +49,30 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
     e.preventDefault();
     if (!draft.name.trim()) return;
     const now = Date.now();
+    const { photo: draftPhoto, ...rest } = draft;
     const clean = {
-      ...draft,
-      name: draft.name.trim(),
-      color: draft.color.trim(),
-      quantity: Math.max(1, Math.round(draft.quantity) || 1),
-      wearCount: Math.max(1, Math.round(draft.wearCount) || 1),
-      favorite: Math.max(0, Math.min(5, Math.round(draft.favorite) || 0)),
-      customTags: cleanTags(draft.customTags),
+      ...rest,
+      name: rest.name.trim(),
+      color: rest.color.trim(),
+      quantity: Math.max(1, Math.round(rest.quantity) || 1),
+      wearCount: Math.max(1, Math.round(rest.wearCount) || 1),
+      favorite: Math.max(0, Math.min(5, Math.round(rest.favorite) || 0)),
+      customTags: cleanTags(rest.customTags),
     };
     if (item?.id != null) {
-      await db.closetItems.update(item.id, { ...clean, updatedAt: now });
+      // Only include photo in the update when explicitly changed; spreading
+      // photo: undefined into update() removes the Blob from IndexedDB.
+      const photoChanges = photoTouched ? { photo: draftPhoto } : {};
+      await db.closetItems.update(item.id, { ...clean, ...photoChanges, updatedAt: now });
     } else {
-      await db.closetItems.add({ ...clean, isSample: false, createdAt: now, updatedAt: now });
+      await db.closetItems.add({ ...clean, photo: draftPhoto, isSample: false, createdAt: now, updatedAt: now });
     }
     onDone();
   }
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <PhotoInput value={draft.photo} onChange={(b) => set('photo', b)} />
+      <PhotoInput value={draft.photo} onChange={(b) => { set('photo', b); setPhotoTouched(true); }} />
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-slate-700">Favorite score</span>
         <Stars value={draft.favorite} onChange={(n) => set('favorite', n)} />

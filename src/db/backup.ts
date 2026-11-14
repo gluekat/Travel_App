@@ -94,7 +94,6 @@ export async function importDatabase(data: unknown): Promise<void> {
   });
 }
 
-/** Export and trigger a browser download of the backup JSON. */
 /**
  * Export everything and hand it to the user: on phones and tablets via the
  * share sheet (so it can go straight to the Files app), otherwise as a download.
@@ -119,6 +118,31 @@ export async function downloadBackup(): Promise<'shared' | 'downloaded'> {
   }
   await setSetting('lastExportAt', Date.now());
   return how;
+}
+
+/**
+ * Export to a user-chosen file via the File System Access API (Chromium only).
+ * Returns false if the browser doesn't support it or the user cancelled.
+ */
+export async function saveBackupAs(): Promise<boolean> {
+  if (typeof window === 'undefined' || !('showSaveFilePicker' in window)) return false;
+  let handle: FileSystemFileHandle;
+  try {
+    handle = await (window as unknown as { showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
+      suggestedName: `packwise-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      types: [{ description: 'JSON backup', accept: { 'application/json': ['.json'] } }],
+    });
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') return false;
+    throw e;
+  }
+  const backup = await exportDatabase();
+  const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+  await setSetting('lastExportAt', Date.now());
+  return true;
 }
 
 function triggerDownload(blob: Blob, name: string) {

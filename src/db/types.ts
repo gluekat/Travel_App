@@ -54,6 +54,13 @@ export interface ClosetItem {
   updatedAt: number;
 }
 
+export interface TripNotes {
+  /** Free-text general weather summary, e.g. "Hot and humid, afternoon thunderstorms". */
+  weather?: string;
+  /** Free-text packing reminders, e.g. "Bring a rain jacket; smart dress code for restaurants". */
+  packingAlerts?: string;
+}
+
 export interface Trip {
   id?: number;
   /** Optional user-defined name, e.g. "Summer holiday". Falls back to placeLabel ?? destination when absent. */
@@ -67,6 +74,7 @@ export interface Trip {
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
   createdAt: number;
+  notes?: TripNotes;
 }
 
 /** How a day's weather was obtained. "cached" is a display state, not stored. */
