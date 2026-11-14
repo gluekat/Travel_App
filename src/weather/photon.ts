@@ -1,4 +1,4 @@
-/** Photon geocoder (photon.komoot.io) — supports POI and business name search. */
+/** POI / address search via Nominatim (nominatim.openstreetmap.org). */
 
 export interface PhotonResult {
   /** Short display name, e.g. "Le Meurice". */
@@ -11,21 +11,32 @@ export interface PhotonResult {
   lon: number;
 }
 
-interface PhotonFeature {
-  geometry: { coordinates: [number, number] };
-  properties: {
-    name?: string;
-    street?: string;
-    housenumber?: string;
+interface NominatimRow {
+  lat: string;
+  lon: string;
+  display_name: string;
+  name: string;
+  address?: {
+    house_number?: string;
+    road?: string;
     city?: string;
-    state?: string;
+    town?: string;
+    village?: string;
+    municipality?: string;
     country?: string;
-    postcode?: string;
   };
 }
 
 export async function searchPOI(query: string): Promise<PhotonResult[]> {
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6&lang=en`;
+  const params = new URLSearchParams({
+    format: 'json',
+    q: query,
+    limit: '6',
+    addressdetails: '1',
+    'accept-language': 'en',
+    email: 'packwise@app.local',
+  });
+  const url = `https://nominatim.openstreetmap.org/search?${params}`;
   let res: Response;
   try {
     res = await fetch(url);
@@ -33,17 +44,21 @@ export async function searchPOI(query: string): Promise<PhotonResult[]> {
     return [];
   }
   if (!res.ok) return [];
-  const data = (await res.json()) as { features: PhotonFeature[] };
+  const rows = (await res.json()) as NominatimRow[];
 
-  return data.features
-    .map((f) => {
-      const p = f.properties;
-      const name = p.name ?? '';
-      const street = [p.housenumber, p.street].filter(Boolean).join(' ');
-      const addressParts = [street || undefined, p.city, p.country].filter(Boolean) as string[];
+  return rows
+    .map((row): PhotonResult | null => {
+      const name = row.name || row.display_name.split(',')[0]?.trim() || '';
+      if (!name) return null;
+      const houseNum = row.address?.house_number;
+      const road = row.address?.road;
+      const street = [houseNum, road].filter(Boolean).join(' ');
+      const city = row.address?.city ?? row.address?.town ?? row.address?.village ?? row.address?.municipality ?? '';
+      const country = row.address?.country ?? '';
+      const addressParts = [street || undefined, city || undefined, country || undefined].filter(Boolean) as string[];
       const address = addressParts.join(', ');
-      const label = name ? (address ? `${name}, ${address}` : name) : address;
-      return { name: name || address, address, label, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
+      const label = address ? `${name}, ${address}` : name;
+      return { name, address, label, lat: parseFloat(row.lat), lon: parseFloat(row.lon) };
     })
-    .filter((r) => r.label);
+    .filter((r): r is PhotonResult => r !== null && r.label !== '');
 }
