@@ -54,6 +54,16 @@ export interface ClosetItem {
   updatedAt: number;
 }
 
+/** One destination stop on a multi-city trip (e.g. a cruise port). */
+export interface TripStop {
+  label: string;
+  lat?: number;
+  lon?: number;
+  timezone?: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+}
+
 export interface TripNotes {
   /** Free-text general weather summary, e.g. "Hot and humid, afternoon thunderstorms". */
   weather?: string;
@@ -75,6 +85,8 @@ export interface Trip {
   endDate: string; // YYYY-MM-DD
   createdAt: number;
   notes?: TripNotes;
+  /** For multi-destination trips (e.g. cruises): ordered stops with individual date ranges. */
+  stops?: TripStop[];
 }
 
 /** How a day's weather was obtained. "cached" is a display state, not stored. */

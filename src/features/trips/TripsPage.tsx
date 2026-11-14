@@ -1,29 +1,69 @@
 import { useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
-import type { Trip } from '../../db/types';
+import type { Trip, TripStop } from '../../db/types';
 import { addDays, dateRange, formatDay, todayISO } from '../../lib/dates';
 import { navigate } from '../../lib/router';
 import type { Place } from '../../weather/openMeteo';
-import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
+import { Banner, Button, Field, Icon, Modal } from '../../components/ui';
+import { DateRangePicker } from '../../components/DateRangePicker';
 import { PrivacyNote } from '../settings/PrivacyNote';
 import { PlaceSearch } from './PlaceSearch';
 import { createTrip, MAX_TRIP_DAYS } from './tripService';
 
+interface StopDraft {
+  query: string;
+  place?: Place;
+  start: string;
+  end: string;
+}
+
 function NewTripForm({ onDone }: { onDone: () => void }) {
-  const [query, setQuery] = useState('');
-  const [place, setPlace] = useState<Place>();
-  const [start, setStart] = useState(() => addDays(todayISO(), 3));
-  const [end, setEnd] = useState(() => addDays(todayISO(), 7));
+  const initStart = addDays(todayISO(), 3);
+  const initEnd = addDays(todayISO(), 7);
+  const [stops, setStops] = useState<StopDraft[]>([
+    { query: '', place: undefined, start: initStart, end: initEnd },
+  ]);
   const [error, setError] = useState<string>();
-  const days = dateRange(start, end).length;
+
+  function updateStop(i: number, patch: Partial<StopDraft>) {
+    setStops(s => s.map((stop, idx) => idx === i ? { ...stop, ...patch } : stop));
+  }
+
+  function addStop() {
+    const last = stops[stops.length - 1];
+    const newStart = addDays(last.end, 1);
+    setStops(s => [...s, { query: '', place: undefined, start: newStart, end: addDays(newStart, 3) }]);
+  }
+
+  function removeStop(i: number) {
+    setStops(s => s.filter((_, idx) => idx !== i));
+  }
+
+  const tripStart = stops.map(s => s.start).reduce((a, b) => a < b ? a : b);
+  const tripEnd = stops.map(s => s.end).reduce((a, b) => a > b ? a : b);
+  const totalDays = dateRange(tripStart, tripEnd).length;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!query.trim()) return;
-    if (!place && !confirm('No location selected, so weather will need to be entered manually. Save anyway?')) return;
+    if (!stops[0].query.trim()) return;
+    const anyMissingPlace = stops.some(s => !s.place);
+    if (anyMissingPlace && !confirm('Some stops have no location selected, so weather will need to be entered manually. Save anyway?')) return;
     try {
-      const id = await createTrip(place?.name ?? query, place, start, end);
+      let id: number;
+      if (stops.length === 1) {
+        id = await createTrip(stops[0].place?.name ?? stops[0].query, stops[0].place, stops[0].start, stops[0].end);
+      } else {
+        const tripStops: TripStop[] = stops.map(s => ({
+          label: s.place?.label ?? s.query,
+          lat: s.place?.lat,
+          lon: s.place?.lon,
+          timezone: s.place?.timezone,
+          startDate: s.start,
+          endDate: s.end,
+        }));
+        id = await createTrip(stops[0].place?.name ?? stops[0].query, stops[0].place, tripStart, tripEnd, tripStops);
+      }
       onDone();
       navigate(`/trips/${id}`);
     } catch (err) {
@@ -33,35 +73,54 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <Field label="Destination">
-        <PlaceSearch query={query} onQuery={setQuery} selected={place} onSelect={setPlace} />
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Start date">
-          <input
-            type="date"
-            className={inputClass}
-            value={start}
-            onChange={(e) => {
-              setStart(e.target.value);
-              if (e.target.value > end) setEnd(e.target.value);
-            }}
-            required
-          />
-        </Field>
-        <Field label="End date">
-          <input type="date" className={inputClass} value={end} min={start} onChange={(e) => setEnd(e.target.value)} required />
-        </Field>
-      </div>
+      {stops.map((stop, i) => (
+        <div key={i} className={stops.length > 1 ? 'rounded-lg border border-slate-200 p-3 space-y-3' : 'space-y-3'}>
+          {stops.length > 1 && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-700">Stop {i + 1}</span>
+              <button type="button" onClick={() => removeStop(i)}
+                className="text-xs text-red-600 hover:text-red-800">
+                Remove
+              </button>
+            </div>
+          )}
+          <Field label="Destination">
+            <PlaceSearch
+              query={stop.query}
+              onQuery={q => updateStop(i, { query: q, place: undefined })}
+              selected={stop.place}
+              onSelect={p => updateStop(i, { place: p })}
+            />
+          </Field>
+          <Field label="Dates">
+            <DateRangePicker
+              start={stop.start}
+              end={stop.end}
+              onChange={(s, e) => updateStop(i, { start: s, end: e })}
+            />
+          </Field>
+          <p className="text-xs text-slate-500">
+            {dateRange(stop.start, stop.end).length} day{dateRange(stop.start, stop.end).length !== 1 ? 's' : ''}
+          </p>
+        </div>
+      ))}
+
+      <button type="button" onClick={addStop}
+        className="flex items-center gap-1 text-sm text-teal-700 hover:text-teal-900">
+        <Icon name="plus" className="h-4 w-4" /> Add another destination
+      </button>
+
       <p className="text-sm text-slate-600">
-        {days > 0 ? `${days} day${days > 1 ? 's' : ''}` : 'Invalid dates'}
-        {days > MAX_TRIP_DAYS && ` (max ${MAX_TRIP_DAYS})`}
+        {stops.length > 1 && `Total: `}
+        {totalDays > 0 ? `${totalDays} day${totalDays > 1 ? 's' : ''}` : 'Invalid dates'}
+        {totalDays > MAX_TRIP_DAYS && ` (max ${MAX_TRIP_DAYS})`}
       </p>
       {error && <Banner tone="error">{error}</Banner>}
       <PrivacyNote compact />
       <div className="flex justify-end gap-2">
         <Button onClick={onDone}>Cancel</Button>
-        <Button type="submit" variant="primary" disabled={days < 1 || days > MAX_TRIP_DAYS || !query.trim()}>
+        <Button type="submit" variant="primary"
+          disabled={totalDays < 1 || totalDays > MAX_TRIP_DAYS || !stops[0].query.trim()}>
           Create trip
         </Button>
       </div>
@@ -70,7 +129,11 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
 }
 
 function tripLabel(t: Trip): string {
-  return t.name ?? t.placeLabel ?? t.destination;
+  if (t.name) return t.name;
+  if (t.stops && t.stops.length > 1) {
+    return t.stops.map(s => s.label.split(',')[0].trim()).join(' → ');
+  }
+  return t.placeLabel ?? t.destination;
 }
 
 function classify(t: Trip, today: string): 'current' | 'upcoming' | 'past' {
@@ -144,10 +207,8 @@ export function TripsPage() {
     else if (bucket === 'upcoming') upcoming.push(t);
     else past.push(t);
   }
-  // Current + upcoming: soonest start date first
   current.sort((a, b) => a.startDate.localeCompare(b.startDate));
   upcoming.sort((a, b) => a.startDate.localeCompare(b.startDate));
-  // Past: most recent first
   past.sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   const hasActive = current.length + upcoming.length > 0;

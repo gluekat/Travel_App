@@ -10,6 +10,7 @@ import type { Place } from '../../weather/openMeteo';
 import { LIVE_TTL_MS } from '../../weather/resolveWeather';
 import { refreshTripWeather } from '../../weather/tripWeather';
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
+import { DateRangePicker } from '../../components/DateRangePicker';
 import { PrivacyNote } from '../settings/PrivacyNote';
 import { capacityGaps, countWears } from '../../engine/suggest';
 import { fillEmptyDays, toEngineItem } from '../outfits/outfitService';
@@ -61,7 +62,11 @@ function TripNotesSection({ trip }: { trip: Trip }) {
 type WeatherState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ok' } | { kind: 'error'; message: string };
 
 function tripLabel(t: Trip): string {
-  return t.name ?? t.placeLabel ?? t.destination;
+  if (t.name) return t.name;
+  if (t.stops && t.stops.length > 1) {
+    return t.stops.map(s => s.label.split(',')[0].trim()).join(' → ');
+  }
+  return t.placeLabel ?? t.destination;
 }
 
 function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClose: () => void; onRefreshWeather: () => void }) {
@@ -105,18 +110,29 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
         <Field label="Destination" hint={trip.placeLabel ? `Current: ${trip.placeLabel}` : 'No location set yet.'}>
           <PlaceSearch query={query} onQuery={setQuery} selected={place} onSelect={setPlace} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Start date">
-            <input type="date" className={inputClass} value={start} onChange={(e) => setStart(e.target.value)} />
-          </Field>
-          <Field label="End date">
-            <input type="date" className={inputClass} value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
-          </Field>
-        </div>
-        <p className="text-sm text-slate-600">
-          {days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : 'Invalid dates'}
-          {days > MAX_TRIP_DAYS && ` (max ${MAX_TRIP_DAYS})`}
-        </p>
+        {trip.stops && trip.stops.length > 1 ? (
+          <div className="space-y-1 rounded-lg border border-slate-200 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Destinations</p>
+            {trip.stops.map((stop, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm">
+                <span className="mt-0.5 text-teal-600">📍</span>
+                <span className="font-medium">{stop.label}</span>
+                <span className="text-slate-500">{formatDay(stop.startDate)} – {formatDay(stop.endDate)}</span>
+              </div>
+            ))}
+            <p className="mt-2 text-xs text-slate-500">Create a new trip to change destinations on a multi-stop trip.</p>
+          </div>
+        ) : (
+          <>
+            <Field label="Dates">
+              <DateRangePicker start={start} end={end} onChange={(s, e) => { setStart(s); setEnd(e); }} />
+            </Field>
+            <p className="text-sm text-slate-600">
+              {days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : 'Invalid dates'}
+              {days > MAX_TRIP_DAYS && ` (max ${MAX_TRIP_DAYS})`}
+            </p>
+          </>
+        )}
         {error && <Banner tone="error">{error}</Banner>}
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
@@ -136,11 +152,6 @@ function DuplicateTripDialog({ trip, onClose }: { trip: Trip; onClose: () => voi
   const [end, setEnd] = useState(addDays(defaultStart, length));
   const [error, setError] = useState<string>();
   const [working, setWorking] = useState(false);
-
-  function handleStartChange(val: string) {
-    setStart(val);
-    setEnd(addDays(val, length));
-  }
 
   const days = dateRange(start, end).length;
 
@@ -163,14 +174,9 @@ function DuplicateTripDialog({ trip, onClose }: { trip: Trip; onClose: () => voi
         <p className="text-sm text-slate-600">
           Creates a copy of <strong>{tripLabel(trip)}</strong> with the same outfits and activities. Weather will be refreshed for the new dates.
         </p>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Start date">
-            <input type="date" className={inputClass} value={start} onChange={(e) => handleStartChange(e.target.value)} />
-          </Field>
-          <Field label="End date">
-            <input type="date" className={inputClass} value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
-          </Field>
-        </div>
+        <Field label="Dates">
+          <DateRangePicker start={start} end={end} onChange={(s, e) => { setStart(s); setEnd(e); }} />
+        </Field>
         <p className="text-sm text-slate-600">
           {days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : 'Invalid dates'}
           {days > MAX_TRIP_DAYS && ` (max ${MAX_TRIP_DAYS})`}
@@ -204,7 +210,8 @@ export function TripDetail({ tripId }: { tripId: number }) {
   const overWorn = useMemo(() => (closet && outfits ? capacityGaps(closet.map(toEngineItem), outfits) : []), [closet, outfits]);
   const [fillMessage, setFillMessage] = useState<string>();
 
-  const hasLocation = trip?.lat != null && trip?.lon != null;
+  const hasLocation = (trip?.lat != null && trip?.lon != null) ||
+    (trip?.stops?.some(s => s.lat != null) ?? false);
   const lastFetched = days?.reduce((m, d) => (d.weather && d.weather.source !== 'manual' ? Math.max(m, d.weather.fetchedAt) : m), 0) ?? 0;
 
   const refresh = useCallback(async () => {
@@ -295,6 +302,21 @@ export function TripDetail({ tripId }: { tripId: number }) {
         <Banner tone="error">
           Couldn't fetch weather ({weather.message}). {days.some((d) => !d.weather) ? 'Enter missing days manually below.' : 'Showing cached weather.'}
         </Banner>
+      )}
+
+      {trip.stops && trip.stops.length > 1 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <h2 className="mb-2 text-sm font-semibold text-slate-700">Destinations</h2>
+          <div className="space-y-1">
+            {trip.stops.map((stop, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-x-2 text-sm">
+                <span className="text-teal-600">📍</span>
+                <span className="font-medium">{stop.label}</span>
+                <span className="text-slate-500">{formatDay(stop.startDate)} – {formatDay(stop.endDate)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <TripNotesSection trip={trip} />

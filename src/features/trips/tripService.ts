@@ -1,26 +1,36 @@
 import { db } from '../../db/schema';
 import { defaultGeneralItems, emptyOutfit } from '../../db/migrate';
-import type { Activity, Trip } from '../../db/types';
-import { dateRange, todayISO } from '../../lib/dates';
+import type { Activity, Trip, TripStop } from '../../db/types';
+import { addDays, dateRange, daysBetween, todayISO } from '../../lib/dates';
 import type { Place } from '../../weather/openMeteo';
 import { syncPacking } from '../outfits/outfitService';
 
 export const MAX_TRIP_DAYS = 30;
 
-export async function createTrip(destination: string, place: Place | undefined, startDate: string, endDate: string): Promise<number> {
+export async function createTrip(
+  destination: string,
+  place: Place | undefined,
+  startDate: string,
+  endDate: string,
+  stops?: TripStop[],
+): Promise<number> {
   const dates = dateRange(startDate, endDate);
   if (!dates.length) throw new Error('End date must be on or after the start date.');
   if (dates.length > MAX_TRIP_DAYS) throw new Error(`Trips can be at most ${MAX_TRIP_DAYS} days.`);
   return db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems], async () => {
+    const hasStops = stops && stops.length > 0;
     const tripId = (await db.trips.add({
       destination: destination.trim(),
-      placeLabel: place?.label,
+      placeLabel: hasStops && stops.length > 1
+        ? stops.map(s => s.label.split(',')[0].trim()).join(' → ')
+        : place?.label,
       lat: place?.lat,
       lon: place?.lon,
       timezone: place?.timezone,
       startDate,
       endDate,
       createdAt: Date.now(),
+      stops: hasStops ? stops : undefined,
     })) as number;
     const dayIds = (await db.tripDays.bulkAdd(
       dates.map((date) => ({ tripId, date, activities: ['sightseeing'] as Activity[] })),
@@ -88,6 +98,16 @@ export async function duplicateTrip(source: Trip, newStartDate: string, newEndDa
   ]);
 
   const newTripId = (await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems], async () => {
+    // Shift stops by the same offset as the trip's start date
+    let newStops: TripStop[] | undefined;
+    if (source.stops && source.stops.length > 0) {
+      const offset = daysBetween(source.startDate, newStartDate);
+      newStops = source.stops.map(s => ({
+        ...s,
+        startDate: addDays(s.startDate, offset),
+        endDate: addDays(s.endDate, offset),
+      }));
+    }
     const id = (await db.trips.add({
       name: source.name,
       destination: source.destination,
@@ -98,6 +118,7 @@ export async function duplicateTrip(source: Trip, newStartDate: string, newEndDa
       startDate: newStartDate,
       endDate: newEndDate,
       createdAt: Date.now(),
+      stops: newStops,
     })) as number;
 
     // Map source day ids → new day ids (by position, not by date)
