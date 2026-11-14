@@ -88,7 +88,13 @@ export function PlaceSearch({
               <button
                 type="button"
                 className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                onClick={() => onSelect(p)}
+                onClick={() => {
+                  clearTimeout(debounceRef.current);
+                  onQuery(p.label);
+                  onSelect(p);
+                  setResults(undefined);
+                  setError(undefined);
+                }}
               >
                 {p.label}
                 <span className="ml-2 text-xs text-slate-400">

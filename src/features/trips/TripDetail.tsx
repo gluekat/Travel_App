@@ -61,6 +61,38 @@ function TripNotesSection({ trip }: { trip: Trip }) {
 
 type WeatherState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ok' } | { kind: 'error'; message: string };
 
+/** Returns a short location label for a day card, or undefined when unknown. */
+function getDayLocation(trip: Trip, date: string): string | undefined {
+  if (!trip.stops || trip.stops.length <= 1) {
+    // Single destination: use city portion of the place label or destination
+    const raw = trip.placeLabel ?? trip.destination;
+    return raw ? raw.split(',')[0].trim() : undefined;
+  }
+
+  // Multi-destination: find the stop covering this date
+  const stopIdx = trip.stops.findIndex(s => date >= s.startDate && date <= s.endDate);
+  if (stopIdx >= 0) {
+    const stop = trip.stops[stopIdx];
+    const city = stop.label.split(',')[0].trim();
+    // First day of a stop after the first: show arrival transition
+    if (stopIdx > 0 && date === stop.startDate) {
+      const prev = trip.stops[stopIdx - 1].label.split(',')[0].trim();
+      return `${prev} → ${city}`;
+    }
+    return city;
+  }
+
+  // Gap day (e.g. sea day): show surrounding stops
+  const prevStop = [...trip.stops].filter(s => s.endDate < date).pop();
+  const nextStop = trip.stops.find(s => s.startDate > date);
+  if (prevStop && nextStop) {
+    return `${prevStop.label.split(',')[0].trim()} → ${nextStop.label.split(',')[0].trim()}`;
+  }
+  if (prevStop) return prevStop.label.split(',')[0].trim();
+  if (nextStop) return nextStop.label.split(',')[0].trim();
+  return undefined;
+}
+
 function tripLabel(t: Trip): string {
   if (t.name) return t.name;
   if (t.stops && t.stops.length > 1) {
@@ -344,6 +376,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
             key={d.id}
             day={d}
             index={i + 1}
+            location={getDayLocation(trip, d.date)}
             outfits={outfits.filter((o) => o.tripDayId === d.id)}
             closet={closet}
             usage={usage}

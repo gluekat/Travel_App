@@ -32,8 +32,8 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
 
   function addStop() {
     const last = stops[stops.length - 1];
-    const newStart = addDays(last.end, 1);
-    setStops(s => [...s, { query: '', place: undefined, start: newStart, end: addDays(newStart, 3) }]);
+    // Start the new stop on the same day the previous stop ends
+    setStops(s => [...s, { query: '', place: undefined, start: last.end, end: addDays(last.end, 3) }]);
   }
 
   function removeStop(i: number) {
