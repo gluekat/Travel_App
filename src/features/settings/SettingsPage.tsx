@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, setSetting } from '../../db/schema';
-import { downloadBackup, importBackupFile } from '../../db/backup';
+import { downloadBackup, importBackupFile, saveBackupAs } from '../../db/backup';
 import { requestPersistentStorage, storageEstimate, type PersistStatus } from '../../db/persist';
 import { formatTimestamp } from '../../lib/dates';
 import { useTempUnit } from '../../lib/hooks';
@@ -21,6 +21,7 @@ export function SettingsPage() {
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [message, setMessage] = useState<{ tone: 'info' | 'error'; text: string }>();
   const [busy, setBusy] = useState(false);
+  const [hasSaveAs] = useState(() => typeof window !== 'undefined' && 'showSaveFilePicker' in window);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -33,6 +34,18 @@ export function SettingsPage() {
     try {
       const how = await downloadBackup();
       setMessage({ tone: 'info', text: how === 'shared' ? 'Backup shared. Save it somewhere safe, e.g. your Files app.' : 'Backup downloaded. Keep it somewhere safe.' });
+    } catch (e) {
+      setMessage({ tone: 'error', text: `Export failed: ${(e as Error).message}` });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doSaveAs() {
+    setBusy(true);
+    try {
+      const saved = await saveBackupAs();
+      if (saved) setMessage({ tone: 'info', text: 'Backup saved. You can overwrite the same file next time.' });
     } catch (e) {
       setMessage({ tone: 'error', text: `Export failed: ${(e as Error).message}` });
     } finally {
@@ -70,10 +83,25 @@ export function SettingsPage() {
         <p className="mt-3 text-sm text-slate-600">
           Last export: {lastExportAt ? formatTimestamp(lastExportAt) : <strong>never</strong>}
         </p>
+        <p className="mt-3 text-sm text-slate-600">
+          <strong>Tip:</strong> For automatic backup, link a data file above — it updates within seconds of every change.
+          The manual export below creates a one-time snapshot you can keep anywhere.
+        </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="primary" onClick={doExport} disabled={busy}>
-            Export / save a backup (JSON)
-          </Button>
+          {hasSaveAs ? (
+            <Button variant="primary" onClick={doSaveAs} disabled={busy}>
+              Save backup as… (JSON)
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={doExport} disabled={busy}>
+              Export backup (JSON)
+            </Button>
+          )}
+          {hasSaveAs && (
+            <Button onClick={doExport} disabled={busy}>
+              Download (auto-named)
+            </Button>
+          )}
           <Button onClick={() => fileRef.current?.click()} disabled={busy}>
             Import backup…
           </Button>

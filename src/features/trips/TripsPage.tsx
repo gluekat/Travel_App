@@ -167,8 +167,26 @@ export function TripsPage() {
       )}
 
       {trips !== undefined && !hasActive && past.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">
-          No trips yet. Create one to get weather-aware outfit suggestions.
+        <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">
+          <p className="mb-4 text-center font-medium text-slate-700">No trips yet — create one to get started!</p>
+          <ol className="space-y-2.5 pl-1">
+            <li className="flex gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold text-teal-800">1</span>
+              <span><strong>Add your clothes</strong> in the <a className="font-medium text-teal-700 underline" href="#/closet">Closet</a> — set warmth, formality and activity tags so PackWise can match them to weather.</span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold text-teal-800">2</span>
+              <span><strong>Create a trip</strong> with a destination and dates. PackWise fetches the forecast automatically.</span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold text-teal-800">3</span>
+              <span><strong>Get outfit suggestions</strong> per day — weather-aware and tailored to your activities. Lock favourites and swap individual items.</span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold text-teal-800">4</span>
+              <span><strong>Pack with the checklist</strong> — see exactly how many copies of each item you need across all your outfits.</span>
+            </li>
+          </ol>
         </div>
       )}
 
