@@ -61,5 +61,5 @@ export function fmt12h(time: string): string {
 export function shortLocation(label: string): string {
   const parts = label.split(',').map((p) => p.trim()).filter(Boolean);
   if (parts.length <= 2) return parts.join(', ');
-  return `${parts[0]}, ${parts[parts.length - 1]}`;
+  return `${parts[0]}, ${parts[1]}`; // City, State/Region
 }
