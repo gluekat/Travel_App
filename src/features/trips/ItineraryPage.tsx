@@ -152,6 +152,23 @@ function formatMinutes(mins: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+function timeToMins(t: string): number | null {
+  const parts = t.split(':');
+  const h = parseInt(parts[0] ?? '');
+  const m = parseInt(parts[1] ?? '');
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function timeDiffStr(dep: string, arr: string): string | null {
+  const d = timeToMins(dep);
+  const a = timeToMins(arr);
+  if (d === null || a === null) return null;
+  let diff = a - d;
+  if (diff < 0) diff += 1440; // overnight
+  return diff > 0 ? formatMinutes(diff) : null;
+}
+
 // ─── Transport leg card ───────────────────────────────────────────────────────
 
 const MODE_ICON: Record<TransportMode, string> = { drive: '🚗', fly: '✈️', train: '🚂', boat: '🛳️' };
@@ -159,43 +176,107 @@ const MODE_LABEL: Record<TransportMode, string> = { drive: 'Drive', fly: 'Fly', 
 
 function TransportLegCard({ leg, onEdit, onDelete }: { leg: TransportLeg; onEdit: () => void; onDelete: () => void }) {
   const icon = MODE_ICON[leg.mode];
-  const label = MODE_LABEL[leg.mode];
+  const modeLabel = MODE_LABEL[leg.mode];
+  const conns = leg.connections ?? [];
+  const nSegs = conns.length + 1;
+
+  const cardActions = (
+    <div className="flex shrink-0 gap-1">
+      <button type="button" onClick={onEdit} className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-100">Edit</button>
+      <button type="button" onClick={onDelete} className="rounded px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">Delete</button>
+    </div>
+  );
+
+  if (conns.length > 0) {
+    // Build segment list: each segment is one flight leg between two airports
+    const segments = Array.from({ length: nSegs }, (_, k) => {
+      const from = k === 0 ? (leg.fromPoint ?? '') : (conns[k - 1]?.point ?? '');
+      const depTime = k === 0 ? (leg.departureTime ?? '') : (conns[k - 1]?.depart ?? '');
+      const to = k === nSegs - 1 ? (leg.toPoint ?? '') : (conns[k]?.point ?? '');
+      const arrTime = k === nSegs - 1 ? (leg.arrivalTime ?? '') : (conns[k]?.arrive ?? '');
+      const flightNum = k === 0 ? (leg.identifier ?? '') : (conns[k - 1]?.identifier ?? '');
+      // Layover after this segment's arrival (before the next departure)
+      const layoverAfter =
+        k < nSegs - 1 && conns[k]
+          ? timeDiffStr(conns[k]!.arrive ?? '', conns[k]!.depart ?? '')
+          : null;
+      return { from, depTime, to, arrTime, flightNum, layoverAfter };
+    });
+
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <p className="text-sm font-semibold">{icon} {modeLabel} · {conns.length} stop{conns.length > 1 ? 's' : ''}</p>
+              <span className="text-xs text-slate-500">{formatDay(leg.departureDate)}</span>
+              {leg.carrier && <span className="text-xs text-slate-500">{leg.carrier}</span>}
+              {leg.bookingRef && <span className="text-xs text-slate-500">Ref: {leg.bookingRef}</span>}
+            </div>
+            <div className="mt-2 space-y-1">
+              {segments.map((seg, k) => {
+                const dur = seg.depTime && seg.arrTime ? timeDiffStr(seg.depTime, seg.arrTime) : null;
+                return (
+                  <div key={k}>
+                    {/* Segment row: DepTime  From  →  flightNum · duration  →  ArrTime  To */}
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm">
+                      {seg.depTime && <span className="font-mono font-medium">{fmt12h(seg.depTime)}</span>}
+                      {seg.from && <span className="font-medium">{seg.from}</span>}
+                      <span className="text-slate-400">→</span>
+                      {seg.flightNum && <span className="text-xs text-slate-500">{seg.flightNum}</span>}
+                      {dur && <span className="text-xs text-slate-400">({dur})</span>}
+                      <span className="text-slate-400">→</span>
+                      {seg.arrTime && <span className="font-mono text-slate-600">{fmt12h(seg.arrTime)}</span>}
+                      {seg.to && <span className="text-slate-700">{seg.to}</span>}
+                    </div>
+                    {/* Layover badge between segments */}
+                    {seg.layoverAfter && (
+                      <div className="ml-2 mt-0.5 w-fit rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+                        ⏱ Layover: {seg.layoverAfter}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {leg.notes && <p className="mt-1 text-xs italic text-slate-400">{leg.notes}</p>}
+          </div>
+          {cardActions}
+        </div>
+      </div>
+    );
+  }
+
+  // Direct leg (no connections)
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">{icon} {label}</p>
-          <p className="mt-0.5 text-sm text-slate-700">
-            {formatDay(leg.departureDate)}
-            {leg.departureTime && <span> {fmt12h(leg.departureTime)}</span>}
-            {leg.fromPoint && <span> · {leg.fromPoint}</span>}
-            {(leg.arrivalDate || leg.arrivalTime || leg.toPoint) && <span> →</span>}
-            {leg.arrivalDate && leg.arrivalDate !== leg.departureDate && <span> {formatDay(leg.arrivalDate)}</span>}
-            {leg.arrivalTime && <span> {fmt12h(leg.arrivalTime)}</span>}
-            {leg.toPoint && <span> · {leg.toPoint}</span>}
-          </p>
-          {(leg.carrier || leg.identifier) && (
-            <p className="mt-0.5 text-xs text-slate-500">
-              {[leg.carrier, leg.identifier].filter(Boolean).join(' · ')}
-              {leg.bookingRef && ` · Ref: ${leg.bookingRef}`}
-            </p>
-          )}
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p className="text-sm font-semibold">{icon} {modeLabel}</p>
+            <span className="text-xs text-slate-500">{formatDay(leg.departureDate)}</span>
+            {leg.carrier && <span className="text-xs text-slate-500">{leg.carrier}</span>}
+            {leg.identifier && <span className="text-xs text-slate-500">{leg.identifier}</span>}
+            {leg.bookingRef && <span className="text-xs text-slate-500">Ref: {leg.bookingRef}</span>}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-slate-700">
+            {leg.departureTime && <span className="font-mono font-medium">{fmt12h(leg.departureTime)}</span>}
+            {leg.fromPoint && <span className="font-medium">{leg.fromPoint}</span>}
+            {(leg.toPoint || leg.arrivalTime) && <span className="text-slate-400">→</span>}
+            {leg.arrivalDate && leg.arrivalDate !== leg.departureDate && (
+              <span className="text-xs text-slate-500">{formatDay(leg.arrivalDate)}</span>
+            )}
+            {leg.arrivalTime && <span className="font-mono">{fmt12h(leg.arrivalTime)}</span>}
+            {leg.toPoint && <span>{leg.toPoint}</span>}
+          </div>
           {leg.distanceMiles != null && (
             <p className="mt-0.5 text-xs text-slate-500">
               {leg.distanceMiles.toFixed(0)} mi{leg.travelTimeMinutes ? ` · ${formatMinutes(leg.travelTimeMinutes)}` : ''}
             </p>
           )}
-          {leg.connections && leg.connections.length > 0 && (
-            <p className="mt-0.5 text-xs text-slate-500">
-              Via: {leg.connections.map((c) => c.point).join(', ')}
-            </p>
-          )}
           {leg.notes && <p className="mt-0.5 text-xs italic text-slate-400">{leg.notes}</p>}
         </div>
-        <div className="flex shrink-0 gap-1">
-          <button type="button" onClick={onEdit} className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-100">Edit</button>
-          <button type="button" onClick={onDelete} className="rounded px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">Delete</button>
-        </div>
+        {cardActions}
       </div>
     </div>
   );
