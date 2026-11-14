@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
 import type { Trip } from '../../db/types';
-import { addDays, dateRange, daysBetween, formatDay, formatTimestamp } from '../../lib/dates';
+import { addDays, dateRange, daysBetween, formatDay, formatTimestamp, shortLocation } from '../../lib/dates';
 import { useOnline, useTempUnit } from '../../lib/hooks';
 import { navigate } from '../../lib/router';
 import { formatTemp } from '../../lib/units';
@@ -61,35 +61,34 @@ function TripNotesSection({ trip }: { trip: Trip }) {
 
 type WeatherState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ok' } | { kind: 'error'; message: string };
 
-/** Returns a short location label for a day card, or undefined when unknown. */
+/** Returns a location label for a day card ("City, Country"), or undefined when unknown. */
 function getDayLocation(trip: Trip, date: string): string | undefined {
   if (!trip.stops || trip.stops.length <= 1) {
-    // Single destination: use city portion of the place label or destination
     const raw = trip.placeLabel ?? trip.destination;
-    return raw ? raw.split(',')[0].trim() : undefined;
+    return raw ? shortLocation(raw) : undefined;
   }
 
   // Multi-destination: find the stop covering this date
   const stopIdx = trip.stops.findIndex(s => date >= s.startDate && date <= s.endDate);
   if (stopIdx >= 0) {
     const stop = trip.stops[stopIdx];
-    const city = stop.label.split(',')[0].trim();
+    const loc = shortLocation(stop.label);
     // First day of a stop after the first: show arrival transition
     if (stopIdx > 0 && date === stop.startDate) {
-      const prev = trip.stops[stopIdx - 1].label.split(',')[0].trim();
-      return `${prev} → ${city}`;
+      const prev = shortLocation(trip.stops[stopIdx - 1].label);
+      return `${prev} → ${loc}`;
     }
-    return city;
+    return loc;
   }
 
   // Gap day (e.g. sea day): show surrounding stops
   const prevStop = [...trip.stops].filter(s => s.endDate < date).pop();
   const nextStop = trip.stops.find(s => s.startDate > date);
   if (prevStop && nextStop) {
-    return `${prevStop.label.split(',')[0].trim()} → ${nextStop.label.split(',')[0].trim()}`;
+    return `${shortLocation(prevStop.label)} → ${shortLocation(nextStop.label)}`;
   }
-  if (prevStop) return prevStop.label.split(',')[0].trim();
-  if (nextStop) return nextStop.label.split(',')[0].trim();
+  if (prevStop) return shortLocation(prevStop.label);
+  if (nextStop) return shortLocation(nextStop.label);
   return undefined;
 }
 

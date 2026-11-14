@@ -1,5 +1,5 @@
 import { ACTIVITIES, type ClosetItem, type Outfit, type ScheduledActivity, type TempUnit, type TripDay } from '../../db/types';
-import { formatDay } from '../../lib/dates';
+import { fmt12h, formatDay } from '../../lib/dates';
 import { Button, ChipGroup, Icon } from '../../components/ui';
 import { db } from '../../db/schema';
 import { OutfitCard } from '../outfits/OutfitCard';
@@ -41,10 +41,10 @@ export function DayCard({ day, index, outfits, closet, usage, unit, formatTemp, 
               return (
                 <li key={act.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                   {act.startTime && (
-                    <span className="w-10 shrink-0 text-slate-500">{act.startTime}</span>
+                    <span className="shrink-0 text-slate-500">{fmt12h(act.startTime)}</span>
                   )}
                   <span className="font-medium">{act.name}</span>
-                  {act.endTime && <span className="text-slate-500">– {act.endTime}</span>}
+                  {act.endTime && <span className="text-slate-500">– {fmt12h(act.endTime)}</span>}
                   {act.location && <span className="text-xs text-slate-400">📍 {act.location}</span>}
                   {outfits.length > 0 && (
                     <select

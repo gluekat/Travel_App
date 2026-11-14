@@ -192,6 +192,13 @@ export interface TransportLeg {
   createdAt: number;
 }
 
+/** Home address stored in settings for pre-filling transport from/to. */
+export interface HomeLocation {
+  label: string;
+  lat: number;
+  lon: number;
+}
+
 export interface ScheduledActivity {
   id?: number;
   tripId: number;

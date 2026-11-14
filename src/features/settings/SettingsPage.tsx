@@ -6,8 +6,59 @@ import { requestPersistentStorage, storageEstimate, type PersistStatus } from '.
 import { formatTimestamp } from '../../lib/dates';
 import { useTempUnit } from '../../lib/hooks';
 import { Banner, Button, Card, Chip } from '../../components/ui';
+import { LocationInput } from '../../components/LocationInput';
 import { PrivacyNote } from './PrivacyNote';
 import { DataFilePanel } from './DataFilePanel';
+import type { HomeLocation } from '../../db/types';
+
+function HomeLocationCard() {
+  const homeLocation = useLiveQuery(
+    async () => {
+      const row = await db.settings.get('homeLocation');
+      return row ? (row.value as HomeLocation) : null;
+    },
+    [],
+  );
+
+  async function saveHome(label: string, lat?: number, lon?: number) {
+    if (!label.trim() || lat === undefined || lon === undefined) return;
+    await setSetting('homeLocation', { label: label.trim(), lat, lon });
+  }
+
+  async function clearHome() {
+    await db.settings.delete('homeLocation');
+  }
+
+  return (
+    <Card>
+      <h2 className="mb-1 font-semibold">Home location</h2>
+      <p className="mb-3 text-sm text-slate-600">Pre-fills outbound and return transport from/to your home address.</p>
+      {homeLocation === undefined && <p className="text-sm text-slate-400">Loading…</p>}
+      {homeLocation !== undefined && (
+        <>
+          {homeLocation && (
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-sm text-slate-700">📍 {homeLocation.label}</span>
+              <button
+                type="button"
+                onClick={() => void clearHome()}
+                className="text-xs text-red-600 hover:text-red-800"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+          <LocationInput
+            value={homeLocation?.label ?? ''}
+            onChange={(label, lat, lon) => void saveHome(label, lat, lon)}
+            placeholder="Search for your home address or city…"
+          />
+          <p className="mt-1.5 text-xs text-slate-400">Pick a result from the dropdown to save.</p>
+        </>
+      )}
+    </Card>
+  );
+}
 
 function formatBytes(n: number) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
@@ -118,6 +169,8 @@ export function SettingsPage() {
           {usage && ` · Using ${formatBytes(usage.usage)}`}
         </p>
       </Card>
+
+      <HomeLocationCard />
 
       <Card>
         <h2 className="mb-2 font-semibold">Temperature unit</h2>
