@@ -4,7 +4,7 @@
  */
 import type { Outfit, PackingItem, TripDay } from './types';
 
-export const CURRENT_DATA_VERSION = 3;
+export const CURRENT_DATA_VERSION = 4;
 
 type Row = Record<string, unknown>;
 export type Tables = Record<string, Row[]>;
@@ -64,11 +64,21 @@ export function migrateV2toV3(tables: Tables): Tables {
   };
 }
 
+/** v3 → v4: itinerary tables added; they are new so no rows need to be transformed. */
+export function migrateV3toV4(tables: Tables): Tables {
+  return {
+    ...tables,
+    tripTransport: tables.tripTransport ?? [],
+    tripActivities: tables.tripActivities ?? [],
+  };
+}
+
 /** Bring tables from any older data version up to the current one. */
 export function migrateTables(tables: Tables, fromVersion: number): Tables {
   let t = tables;
   if (fromVersion < 2) t = migrateV1toV2(t);
   if (fromVersion < 3) t = migrateV2toV3(t);
+  if (fromVersion < 4) t = migrateV3toV4(t);
   return t;
 }
 

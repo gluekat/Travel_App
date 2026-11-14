@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { STORAGE_SUFFIX } from '../lib/channel';
 import { migrateV1toV2, migrateV2toV3, type Tables } from './migrate';
-import type { ClosetItem, Outfit, PackingItem, SavedOutfit, Setting, Trip, TripDay } from './types';
+import type { ClosetItem, Outfit, PackingItem, SavedOutfit, ScheduledActivity, Setting, TransportLeg, Trip, TripDay } from './types';
 
 export class PackWiseDB extends Dexie {
   closetItems!: EntityTable<ClosetItem, 'id'>;
@@ -11,6 +11,8 @@ export class PackWiseDB extends Dexie {
   packingItems!: EntityTable<PackingItem, 'id'>;
   settings!: EntityTable<Setting, 'key'>;
   savedOutfits!: EntityTable<SavedOutfit, 'id'>;
+  tripTransport!: EntityTable<TransportLeg, 'id'>;
+  tripActivities!: EntityTable<ScheduledActivity, 'id'>;
 
   constructor(name = 'packwise') {
     super(name);
@@ -46,6 +48,11 @@ export class PackWiseDB extends Dexie {
         await tx.table('closetItems').clear();
         await tx.table('closetItems').bulkAdd(migrated.closetItems);
       });
+    // v4: itinerary — transport legs and scheduled activities per trip.
+    this.version(4).stores({
+      tripTransport: '++id, tripId, direction, mode',
+      tripActivities: '++id, tripId, tripDayId',
+    });
   }
 }
 
@@ -59,6 +66,8 @@ export const TABLE_NAMES = [
   'packingItems',
   'settings',
   'savedOutfits',
+  'tripTransport',
+  'tripActivities',
 ] as const;
 export type TableName = (typeof TABLE_NAMES)[number];
 
@@ -73,10 +82,12 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 
 /** Delete a trip and everything hanging off it. */
 export async function deleteTrip(tripId: number): Promise<void> {
-  await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems], async () => {
+  await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.tripTransport, db.tripActivities], async () => {
     await db.tripDays.where('tripId').equals(tripId).delete();
     await db.outfits.where('tripId').equals(tripId).delete();
     await db.packingItems.where('tripId').equals(tripId).delete();
+    await db.tripTransport.where('tripId').equals(tripId).delete();
+    await db.tripActivities.where('tripId').equals(tripId).delete();
     await db.trips.delete(tripId);
   });
 }

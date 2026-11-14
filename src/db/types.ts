@@ -160,3 +160,49 @@ export interface Setting {
 }
 
 export type TempUnit = 'F' | 'C';
+
+export type TransportMode = 'drive' | 'fly' | 'train' | 'boat';
+
+/** A connecting leg, layover, or port stop within a transport leg. */
+export interface TransportConnection {
+  point: string;       // airport code/name, station, or port
+  arrive?: string;     // HH:mm — arrival at this connection point
+  depart?: string;     // HH:mm — departure from this connection point
+  identifier?: string; // next flight #, next train # (not used for boat)
+}
+
+export interface TransportLeg {
+  id?: number;
+  tripId: number;
+  direction: 'outbound' | 'return';
+  mode: TransportMode;
+  departureDate: string;      // YYYY-MM-DD
+  departureTime?: string;     // HH:mm
+  arrivalDate?: string;       // YYYY-MM-DD
+  arrivalTime?: string;       // HH:mm
+  fromPoint?: string;         // city, airport code, station, or port
+  toPoint?: string;
+  carrier?: string;           // airline, train operator, or cruise line
+  identifier?: string;        // flight #, train #, or ship name
+  bookingRef?: string;
+  distanceMiles?: number;
+  travelTimeMinutes?: number;
+  connections?: TransportConnection[];
+  notes?: string;
+  createdAt: number;
+}
+
+export interface ScheduledActivity {
+  id?: number;
+  tripId: number;
+  tripDayId: number;
+  name: string;
+  category?: string;
+  startTime?: string;      // HH:mm
+  endTime?: string;        // HH:mm
+  durationMinutes?: number;
+  location?: string;
+  notes?: string;
+  outfitId?: number;       // linked outfit for this activity
+  createdAt: number;
+}

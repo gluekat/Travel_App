@@ -230,6 +230,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
   const days = useLiveQuery(() => db.tripDays.where('tripId').equals(tripId).sortBy('date'), [tripId]);
   const outfits = useLiveQuery(() => db.outfits.where('tripId').equals(tripId).sortBy('rank'), [tripId]);
   const closet = useLiveQuery(() => db.closetItems.toArray(), []);
+  const activities = useLiveQuery(() => db.tripActivities.where('tripId').equals(tripId).toArray(), [tripId]);
   const unit = useTempUnit();
   const online = useOnline();
   const [weather, setWeather] = useState<WeatherState>({ kind: 'idle' });
@@ -382,6 +383,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
             usage={usage}
             unit={unit}
             formatTemp={fmt}
+            activities={activities?.filter((a) => a.tripDayId === d.id)}
           />
         ))}
       </div>

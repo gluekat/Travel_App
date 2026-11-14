@@ -9,6 +9,7 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { TripsPage } from './features/trips/TripsPage';
 import { TripDetail } from './features/trips/TripDetail';
 import { PackingPage } from './features/packing/PackingPage';
+import { ItineraryPage } from './features/trips/ItineraryPage';
 
 const NAV = [
   { path: 'closet', label: 'Closet', icon: 'shirt' },
@@ -22,7 +23,9 @@ function Page({ route }: { route: string[] }): ReactNode {
   if (section === 'settings') return <SettingsPage />;
   if (section === 'trips' && id) {
     const tripId = Number(id);
-    return sub === 'packing' ? <PackingPage tripId={tripId} /> : <TripDetail tripId={tripId} />;
+    if (sub === 'packing') return <PackingPage tripId={tripId} />;
+    if (sub === 'itinerary') return <ItineraryPage tripId={tripId} />;
+    return <TripDetail tripId={tripId} />;
   }
   return <TripsPage />;
 }

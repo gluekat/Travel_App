@@ -1,8 +1,8 @@
 import { Tabs } from '../../components/Tabs';
 
-export type TripView = 'overview' | 'packing';
+export type TripView = 'overview' | 'packing' | 'itinerary';
 
-/** Switches a trip between its overview (days and outfits) and its packing checklist. */
+/** Switches a trip between its overview, packing checklist, and itinerary. */
 export function TripTabs({ tripId, current }: { tripId: number; current: TripView }) {
   return (
     <Tabs
@@ -11,6 +11,7 @@ export function TripTabs({ tripId, current }: { tripId: number; current: TripVie
       tabs={[
         { id: 'overview', label: 'Trip Overview', href: `#/trips/${tripId}` },
         { id: 'packing', label: 'Packing Checklist', href: `#/trips/${tripId}/packing` },
+        { id: 'itinerary', label: 'Itinerary', href: `#/trips/${tripId}/itinerary` },
       ]}
     />
   );
