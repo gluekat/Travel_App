@@ -304,19 +304,23 @@ function TransportFormModal({ tripId, trip, home, existing, defaultDirection, on
         </Field>
 
         {/* Dates & times */}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Departure date">
-            <input type="date" className={inputClass} value={draft.departureDate} onChange={(e) => set({ departureDate: e.target.value })} required />
-          </Field>
-          <Field label="Departure time">
-            <TimeInput value={draft.departureTime} onChange={(v) => set({ departureTime: v })} />
-          </Field>
-          <Field label="Arrival date">
-            <input type="date" className={inputClass} value={draft.arrivalDate} onChange={(e) => set({ arrivalDate: e.target.value })} />
-          </Field>
-          <Field label="Arrival time">
-            <TimeInput value={draft.arrivalTime} onChange={(v) => set({ arrivalTime: v })} />
-          </Field>
+        <div className="space-y-3">
+          <div>
+            <p className="mb-1 text-sm font-medium text-slate-700">Departure</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="date" className={`${inputClass} min-w-[9rem] flex-1`} value={draft.departureDate}
+                onChange={(e) => set({ departureDate: e.target.value })} required />
+              <TimeInput value={draft.departureTime} onChange={(v) => set({ departureTime: v })} />
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 text-sm font-medium text-slate-700">Arrival</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="date" className={`${inputClass} min-w-[9rem] flex-1`} value={draft.arrivalDate}
+                onChange={(e) => set({ arrivalDate: e.target.value })} />
+              <TimeInput value={draft.arrivalTime} onChange={(v) => set({ arrivalTime: v })} />
+            </div>
+          </div>
         </div>
 
         {/* From / To */}
