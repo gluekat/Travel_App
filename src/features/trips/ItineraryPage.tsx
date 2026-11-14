@@ -395,8 +395,12 @@ function TransportFormModal({ tripId, trip, home, existing, defaultDirection, on
             {draft.connections.map((conn, ci) => (
               <div key={ci} className="mb-2 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2">
                 <div className="flex-1" style={{ minWidth: '8rem' }}>
-                  <label className="text-xs text-slate-500">{connPointLabel}</label>
-                  <input type="text" className={inputClass} value={conn.point} onChange={(e) => setConn(ci, { point: e.target.value })} />
+                  <label className="mb-1 block text-xs text-slate-500">{connPointLabel}</label>
+                  <LocationInput
+                    value={conn.point}
+                    onChange={(label) => setConn(ci, { point: label })}
+                    placeholder={connPointLabel}
+                  />
                 </div>
                 <div>
                   <label className="text-xs text-slate-500">Arrive</label>
@@ -526,11 +530,12 @@ function ActivityFormModal({ tripId, days, existing, defaultDayId, onClose }: {
           <input type="number" min={0} className={inputClass} value={durationMins} onChange={(e) => setDurationMins(e.target.value)} />
         </Field>
 
-        <Field label="Location" hint="Optional address or place name">
+        <Field label="Location" hint="Search by business name, landmark, or address">
           <LocationInput
             value={location}
             onChange={(label) => setLocation(label)}
-            placeholder="e.g. Colosseum, Rome"
+            placeholder="e.g. Eiffel Tower, Le Meurice Paris…"
+            mode="poi"
           />
         </Field>
 
