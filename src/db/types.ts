@@ -108,6 +108,8 @@ export interface TripDay {
   date: string; // YYYY-MM-DD
   activities: Activity[];
   weather?: DayWeather;
+  laundryDay?: boolean;
+  laundryItems?: number[]; // ClosetItem IDs to wash
 }
 
 /** One outfit the user is wearing on a trip day. A day can have several. */
