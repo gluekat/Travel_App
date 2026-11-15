@@ -281,6 +281,25 @@ export function TripDetail({ tripId }: { tripId: number }) {
     return result;
   }, [outfits, days, dayDateMap]);
 
+  // Trip-wide total wears per item (Y in "wear X of Y planned")
+  const tripWears = useMemo(() => countWears(outfits ?? []), [outfits]);
+
+  // Trip-wide cumulative wears up to each day (X in "wear X of Y planned")
+  const cumulativeByDayId = useMemo(() => {
+    if (!outfits || !days) return new Map<number, Map<number, number>>();
+    const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+    const result = new Map<number, Map<number, number>>();
+    const running = new Map<number, number>();
+    for (const day of sortedDays) {
+      for (const o of outfits) {
+        if (dayDateMap.get(o.tripDayId) !== day.date) continue;
+        for (const id of o.itemIds) running.set(id, (running.get(id) ?? 0) + 1);
+      }
+      result.set(day.id!, new Map(running));
+    }
+    return result;
+  }, [outfits, days, dayDateMap]);
+
   // Per-day capacity warnings: fires on the day an item first exceeds its capacity within a laundry cycle
   const overWornByDayId = useMemo(() => {
     if (!outfits || !days || !closet) return new Map<number, string[]>();
@@ -441,6 +460,8 @@ export function TripDetail({ tripId }: { tripId: number }) {
             outfits={outfits.filter((o) => o.tripDayId === d.id)}
             closet={closet}
             usage={cycleUsageByDayId.get(d.id!) ?? new Map()}
+            tripTotals={tripWears}
+            cumulativeUsage={cumulativeByDayId.get(d.id!) ?? new Map()}
             prelaundryUsage={d.laundryDay ? prelaundryUsage.get(d.id!) : undefined}
             warnings={overWornByDayId.get(d.id!)}
             unit={unit}

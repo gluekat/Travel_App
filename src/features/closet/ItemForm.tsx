@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import {
@@ -36,7 +36,11 @@ const EMPTY: Draft = {
 
 const WARMTH_LABELS = ['', 'Very light', 'Light', 'Medium', 'Warm', 'Very warm'];
 
-export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => void }) {
+export interface ItemFormHandle {
+  save: () => Promise<void>;
+}
+
+export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; onDone: () => void }>(function ItemForm({ item, onDone }, ref) {
   const [draft, setDraft] = useState<Draft>(() => {
     if (!item) return EMPTY;
     const { name, category, color, warmth, formality, weatherTags, activities, photo, quantity = 1, wearCount = 1, favorite = 0, customTags = [], subcategory, unlimitedWear } = item;
@@ -48,8 +52,7 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
   const knownTags = useLiveQuery(async () => (await db.closetItems.orderBy('customTags').uniqueKeys()) as string[], [], []);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  const doSave = useCallback(async () => {
     if (!draft.name.trim()) return;
     const now = Date.now();
     const { photo: draftPhoto, ...rest } = draft;
@@ -73,6 +76,13 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
       await db.closetItems.add({ ...clean, photo: draftPhoto, isSample: false, createdAt: now, updatedAt: now });
     }
     onDone();
+  }, [draft, photoTouched, item, onDone]);
+
+  useImperativeHandle(ref, () => ({ save: doSave }), [doSave]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    await doSave();
   }
 
   return (
@@ -179,4 +189,4 @@ export function ItemForm({ item, onDone }: { item?: ClosetItem; onDone: () => vo
       </div>
     </form>
   );
-}
+});
