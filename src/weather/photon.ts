@@ -27,7 +27,10 @@ interface NominatimRow {
   };
 }
 
-export async function searchPOI(query: string): Promise<PhotonResult[]> {
+export async function searchPOI(
+  query: string,
+  near?: { lat: number; lon: number },
+): Promise<PhotonResult[]> {
   const params = new URLSearchParams({
     format: 'json',
     q: query,
@@ -36,6 +39,11 @@ export async function searchPOI(query: string): Promise<PhotonResult[]> {
     'accept-language': 'en',
     email: 'packwise@app.local',
   });
+  // Bias results toward the trip destination without strictly bounding them
+  if (near) {
+    const d = 0.5; // ~55 km half-width
+    params.set('viewbox', `${near.lon - d},${near.lat + d},${near.lon + d},${near.lat - d}`);
+  }
   const url = `https://nominatim.openstreetmap.org/search?${params}`;
   let res: Response;
   try {

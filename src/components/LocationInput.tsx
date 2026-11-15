@@ -21,15 +21,21 @@ interface Props {
   /**
    * 'place' (default) — city / region search via Open-Meteo (same backend
    *   as trip creation; best for transport from/to, home location).
-   * 'poi' — business name / address search via Photon (best for
+   * 'poi' — business name / address search via Nominatim (best for
    *   activity locations: restaurants, museums, landmarks).
    */
   mode?: 'place' | 'poi';
+  /** When mode='poi', bias results toward this location (trip destination). */
+  near?: { lat: number; lon: number };
 }
 
-async function runSearch(query: string, mode: 'place' | 'poi'): Promise<SearchResult[]> {
+async function runSearch(
+  query: string,
+  mode: 'place' | 'poi',
+  near?: { lat: number; lon: number },
+): Promise<SearchResult[]> {
   if (mode === 'poi') {
-    const results = await searchPOI(query);
+    const results = await searchPOI(query, near);
     return results.map((r) => ({ name: r.name, detail: r.address, label: r.label, lat: r.lat, lon: r.lon }));
   }
   const results = await geocode(query);
@@ -46,7 +52,7 @@ async function runSearch(query: string, mode: 'place' | 'poi'): Promise<SearchRe
  * Location search input.
  * Calls onChange on every keystroke (free text) and on selection (with coords).
  */
-export function LocationInput({ value, onChange, placeholder, mode = 'place' }: Props) {
+export function LocationInput({ value, onChange, placeholder, mode = 'place', near }: Props) {
   const [query, setQuery] = useState(value);
   const [results, setResults] = useState<SearchResult[]>();
   const [busy, setBusy] = useState(false);
@@ -66,7 +72,7 @@ export function LocationInput({ value, onChange, placeholder, mode = 'place' }: 
     setBusy(true);
     setError(undefined);
     try {
-      const r = await runSearch(trimmed, mode);
+      const r = await runSearch(trimmed, mode, near);
       setResults(r);
       if (!r.length) setError('No results found. Try a different spelling.');
     } catch {
