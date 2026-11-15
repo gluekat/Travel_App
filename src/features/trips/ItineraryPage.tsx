@@ -735,40 +735,45 @@ function LodgingFormModal({ tripId, trip, existing, onClose }: {
   return (
     <Modal title={existing ? 'Edit lodging' : 'Add lodging'} onClose={onClose}>
       <form onSubmit={save} className="space-y-3">
-        <Field label="Hotel / lodging name">
-          <input type="text" className={inputClass} value={name} onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Marriott Opera Grand" required />
-        </Field>
-
-        <Field label="Address" hint="Search by name or address">
+        <Field label="Address" hint="Search by name or address — name auto-fills below">
           <LocationInput
             value={location}
-            onChange={(label, lat, lon) => { setLocation(label); setLocationLat(lat); setLocationLon(lon); }}
-            placeholder="e.g. Hotel name, street, city…"
+            onChange={(label, lat, lon) => {
+              setLocation(label);
+              setLocationLat(lat);
+              setLocationLon(lon);
+              // Auto-fill name from the first segment of the selected result
+              if (lat !== undefined && !name.trim()) {
+                const suggested = label.split(',')[0]?.trim() ?? '';
+                if (suggested) setName(suggested);
+              }
+            }}
+            placeholder="e.g. Marriott Opera Grand, 228 Rue de Rivoli…"
             mode="poi"
             near={nearCoords}
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Check-in date">
-            <input type="date" className={inputClass} value={checkInDate}
-              onChange={(e) => setCheckInDate(e.target.value)} required />
-          </Field>
-          <Field label="Check-in time" hint="Optional">
-            <TimeInput value={checkInTime} onChange={setCheckInTime} />
-          </Field>
-        </div>
+        <Field label="Hotel / lodging name">
+          <input type="text" className={inputClass} value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Marriott Opera Grand" required />
+        </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Check-out date">
-            <input type="date" className={inputClass} value={checkOutDate}
+        <Field label="Check-in">
+          <div className="flex flex-wrap items-center gap-2">
+            <input type="date" className={`${inputClass} flex-1 min-w-[8rem]`} value={checkInDate}
+              onChange={(e) => setCheckInDate(e.target.value)} required />
+            <TimeInput value={checkInTime} onChange={setCheckInTime} />
+          </div>
+        </Field>
+
+        <Field label="Check-out">
+          <div className="flex flex-wrap items-center gap-2">
+            <input type="date" className={`${inputClass} flex-1 min-w-[8rem]`} value={checkOutDate}
               onChange={(e) => setCheckOutDate(e.target.value)} required />
-          </Field>
-          <Field label="Check-out time" hint="Optional">
             <TimeInput value={checkOutTime} onChange={setCheckOutTime} />
-          </Field>
-        </div>
+          </div>
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Confirmation #" hint="Optional">
