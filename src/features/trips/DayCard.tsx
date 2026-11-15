@@ -28,7 +28,10 @@ interface Props {
 /** A trip day: its weather, activities and the outfits you've chosen. */
 export function DayCard({ day, index, outfits, closet, usage, prelaundryUsage, warnings, unit, formatTemp, location, activities }: Props) {
   const [showSavedPicker, setShowSavedPicker] = useState(false);
-  const savedOutfits = useLiveQuery(() => db.savedOutfits.orderBy('name').toArray(), []);
+  const savedOutfits = useLiveQuery(async () => {
+    const all = await db.savedOutfits.toArray();
+    return all.sort((a, b) => a.name.localeCompare(b.name));
+  }, []);
   const sorted = activities ? [...activities].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? '')) : [];
 
   return (
