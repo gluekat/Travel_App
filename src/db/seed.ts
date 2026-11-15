@@ -14,6 +14,8 @@ const SAMPLE_WEARS: Record<ClosetItem['category'], number> = {
   accessory: 10,
   swimwear: 3,
   activewear: 2,
+  underwear: 1,
+  pajamas: 3,
 };
 
 export const SAMPLE_WARDROBE: SeedItem[] = [

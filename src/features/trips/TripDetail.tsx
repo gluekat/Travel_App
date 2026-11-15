@@ -255,6 +255,23 @@ export function TripDetail({ tripId }: { tripId: number }) {
     });
   }, [outfits, lastLaundryDate, dayDateMap]);
   const usage = useMemo(() => countWears(outfitsSinceLaundry), [outfitsSinceLaundry]);
+
+  // For each laundry-day card: items worn BEFORE that day (what actually needs washing)
+  const prelaundryUsage = useMemo(() => {
+    if (!outfits || !days) return new Map<number, Map<number, number>>();
+    const sortedLaundryDays = [...days].filter((d) => d.laundryDay).sort((a, b) => a.date.localeCompare(b.date));
+    const result = new Map<number, Map<number, number>>();
+    for (let i = 0; i < sortedLaundryDays.length; i++) {
+      const lday = sortedLaundryDays[i];
+      const prevDate = i > 0 ? sortedLaundryDays[i - 1].date : undefined;
+      const relevant = outfits.filter((o) => {
+        const d = dayDateMap.get(o.tripDayId);
+        return d !== undefined && d < lday.date && (!prevDate || d >= prevDate);
+      });
+      result.set(lday.id!, countWears(relevant));
+    }
+    return result;
+  }, [outfits, days, dayDateMap]);
   const overWorn = useMemo(
     () => (closet ? capacityGaps(closet.map(toEngineItem), outfitsSinceLaundry) : []),
     [closet, outfitsSinceLaundry],
@@ -399,6 +416,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
             outfits={outfits.filter((o) => o.tripDayId === d.id)}
             closet={closet}
             usage={usage}
+            prelaundryUsage={d.laundryDay ? prelaundryUsage.get(d.id!) : undefined}
             unit={unit}
             formatTemp={fmt}
             activities={activities?.filter((a) => a.tripDayId === d.id)}

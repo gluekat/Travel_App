@@ -96,6 +96,9 @@ export const CATEGORY_SLOTS: Record<Category, Slot[]> = {
   accessory: ['accessory'],
   swimwear: ['swimwear'],
   activewear: ['bottom', 'top'],
+  // underwear and pajamas are not part of outfit suggestions
+  underwear: [],
+  pajamas: [],
 };
 
 /** Slots that cannot coexist in one outfit. */
