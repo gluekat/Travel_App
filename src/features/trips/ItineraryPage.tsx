@@ -7,6 +7,7 @@ import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components
 import { TimeInput } from '../../components/TimeInput';
 import { LocationInput } from '../../components/LocationInput';
 import { TripTabs } from './TripTabs';
+import { getDayLocation } from './TripDetail';
 
 // ─── Form draft types ────────────────────────────────────────────────────────
 
@@ -649,12 +650,15 @@ function ActivityFormModal({ tripId, trip, days, existing, defaultDayId, onClose
 
 // ─── Lodging card ─────────────────────────────────────────────────────────────
 
-function LodgingCard({ stay, onEdit, onDelete }: { stay: TripLodging; onEdit: () => void; onDelete: () => void }) {
+function LodgingCard({ stay, tripCity, onEdit, onDelete }: { stay: TripLodging; tripCity?: string; onEdit: () => void; onDelete: () => void }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">🏨 {stay.name}</p>
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <p className="text-sm font-semibold">🏨 {stay.name}</p>
+            {tripCity && <span className="text-xs font-normal text-teal-700">{tripCity}</span>}
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-slate-700">
             <span>{formatDay(stay.checkInDate)}{stay.checkInTime ? ` · ${fmt12h(stay.checkInTime)}` : ''}</span>
             <span className="text-slate-400">→</span>
@@ -905,6 +909,7 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
             <LodgingCard
               key={stay.id}
               stay={stay}
+              tripCity={getDayLocation(trip, stay.checkInDate)}
               onEdit={() => setLodgingForm(stay)}
               onDelete={() => void deleteLodging(stay)}
             />
@@ -930,7 +935,10 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
           return (
             <div key={day.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                <h3 className="text-sm font-semibold text-slate-700">Day {i + 1} · {formatDay(day.date)}</h3>
+                <h3 className="text-sm font-semibold text-slate-700">
+                  Day {i + 1} · {formatDay(day.date)}
+                  {(() => { const loc = getDayLocation(trip, day.date); return loc ? <span className="font-normal text-teal-700"> · {loc}</span> : null; })()}
+                </h3>
                 {!isLastDay && (
                   nightStay
                     ? <span className="text-xs text-slate-500">🏨 {nightStay.name}</span>

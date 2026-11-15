@@ -1,4 +1,5 @@
 import { ACTIVITIES, type ClosetItem, type Outfit, type ScheduledActivity, type TempUnit, type TripDay } from '../../db/types';
+import { useMemo } from 'react';
 import { fmt12h, formatDay } from '../../lib/dates';
 import { Button, ChipGroup, Icon } from '../../components/ui';
 import { db } from '../../db/schema';
@@ -87,6 +88,107 @@ export function DayCard({ day, index, outfits, closet, usage, unit, formatTemp, 
           <Icon name="plus" /> Add outfit
         </Button>
       </div>
+
+      <LaundrySection day={day} closet={closet} usage={usage} />
     </section>
+  );
+}
+
+function LaundrySection({ day, closet, usage }: { day: TripDay; closet: ClosetItem[]; usage: Map<number, number> }) {
+  const wornItems = useMemo(
+    () => closet.filter((item) => (usage.get(item.id!) ?? 0) > 0),
+    [closet, usage],
+  );
+
+  async function toggleLaundryDay() {
+    if (day.laundryDay) {
+      await db.tripDays.update(day.id!, { laundryDay: false, laundryItems: [] });
+    } else {
+      const suggested = closet
+        .filter((item) => (usage.get(item.id!) ?? 0) >= Math.max(1, item.wearCount - 1))
+        .map((item) => item.id!);
+      await db.tripDays.update(day.id!, { laundryDay: true, laundryItems: suggested });
+    }
+  }
+
+  async function toggleItem(itemId: number) {
+    const current = day.laundryItems ?? [];
+    const next = current.includes(itemId)
+      ? current.filter((id) => id !== itemId)
+      : [...current, itemId];
+    await db.tripDays.update(day.id!, { laundryItems: next });
+  }
+
+  async function suggestItems() {
+    const suggested = closet
+      .filter((item) => (usage.get(item.id!) ?? 0) >= Math.max(1, item.wearCount - 1))
+      .map((item) => item.id!);
+    await db.tripDays.update(day.id!, { laundryItems: suggested });
+  }
+
+  return (
+    <div className="mt-3 border-t border-slate-100 pt-3">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className={`text-sm ${day.laundryDay ? 'font-medium text-sky-700' : 'text-slate-400 hover:text-slate-600'}`}
+          onClick={() => void toggleLaundryDay()}
+        >
+          🧺 {day.laundryDay ? 'Laundry day' : 'Plan laundry'}
+        </button>
+        {day.laundryDay && (
+          <button
+            type="button"
+            className="text-xs text-slate-400 hover:text-red-600"
+            onClick={() => void toggleLaundryDay()}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+
+      {day.laundryDay && (
+        <div className="mt-2 rounded-lg border border-sky-100 bg-sky-50 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-sky-800">Items to wash</p>
+            <button
+              type="button"
+              className="text-xs text-sky-600 hover:underline"
+              onClick={() => void suggestItems()}
+            >
+              Suggest items
+            </button>
+          </div>
+          {wornItems.length === 0 ? (
+            <p className="text-xs text-slate-500">No items worn yet — add outfits to see suggestions.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {wornItems.map((item) => {
+                const wears = usage.get(item.id!) ?? 0;
+                const checked = day.laundryItems?.includes(item.id!) ?? false;
+                const needsWash = wears >= item.wearCount;
+                return (
+                  <li key={item.id} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => void toggleItem(item.id!)}
+                      className="rounded"
+                    />
+                    <span className={needsWash ? 'font-medium text-amber-700' : 'text-slate-700'}>
+                      {item.name}
+                    </span>
+                    <span className="text-slate-400">
+                      {wears}/{item.wearCount} wear{item.wearCount !== 1 ? 's' : ''}
+                    </span>
+                    {needsWash && <span className="text-amber-600">⚠️</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

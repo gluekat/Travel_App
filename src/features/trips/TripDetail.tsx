@@ -62,7 +62,7 @@ function TripNotesSection({ trip }: { trip: Trip }) {
 type WeatherState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ok' } | { kind: 'error'; message: string };
 
 /** Returns a location label for a day card ("City, Country"), or undefined when unknown. */
-function getDayLocation(trip: Trip, date: string): string | undefined {
+export function getDayLocation(trip: Trip, date: string): string | undefined {
   if (!trip.stops || trip.stops.length <= 1) {
     const raw = trip.placeLabel ?? trip.destination;
     return raw ? shortLocation(raw) : undefined;
@@ -238,8 +238,27 @@ export function TripDetail({ tripId }: { tripId: number }) {
   const [generating, setGenerating] = useState(false);
   const autoFetched = useRef(false);
   const fmt = useCallback((c: number) => formatTemp(c, unit), [unit]);
-  const usage = useMemo(() => countWears(outfits ?? []), [outfits]);
-  const overWorn = useMemo(() => (closet && outfits ? capacityGaps(closet.map(toEngineItem), outfits) : []), [closet, outfits]);
+  const dayDateMap = useMemo(
+    () => new Map((days ?? []).map((d) => [d.id!, d.date])),
+    [days],
+  );
+  const lastLaundryDate = useMemo(
+    () => [...(days ?? [])].filter((d) => d.laundryDay).map((d) => d.date).sort().pop(),
+    [days],
+  );
+  const outfitsSinceLaundry = useMemo(() => {
+    if (!outfits) return [];
+    if (!lastLaundryDate) return outfits;
+    return outfits.filter((o) => {
+      const date = dayDateMap.get(o.tripDayId);
+      return date !== undefined && date >= lastLaundryDate;
+    });
+  }, [outfits, lastLaundryDate, dayDateMap]);
+  const usage = useMemo(() => countWears(outfitsSinceLaundry), [outfitsSinceLaundry]);
+  const overWorn = useMemo(
+    () => (closet ? capacityGaps(closet.map(toEngineItem), outfitsSinceLaundry) : []),
+    [closet, outfitsSinceLaundry],
+  );
   const [fillMessage, setFillMessage] = useState<string>();
 
   const hasLocation = (trip?.lat != null && trip?.lon != null) ||
