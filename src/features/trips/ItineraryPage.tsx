@@ -528,8 +528,9 @@ const ACTIVITY_CATEGORIES = [
   'Beach', 'Excursion', 'Other',
 ];
 
-function ActivityFormModal({ tripId, days, existing, defaultDayId, onClose }: {
+function ActivityFormModal({ tripId, trip, days, existing, defaultDayId, onClose }: {
   tripId: number;
+  trip: Trip;
   days: TripDay[];
   existing?: ScheduledActivity;
   defaultDayId: number;
@@ -543,6 +544,17 @@ function ActivityFormModal({ tripId, days, existing, defaultDayId, onClose }: {
   const [durationMins, setDurationMins] = useState(existing?.durationMinutes ? String(existing.durationMinutes) : '');
   const [location, setLocation] = useState(existing?.location ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
+
+  // Coordinates to bias POI search toward the active day's location
+  const nearCoords = (() => {
+    const day = days.find((d) => d.id === dayId);
+    if (trip.stops && trip.stops.length > 1 && day) {
+      const stop = [...trip.stops].reverse().find((s) => s.startDate <= day.date);
+      if (stop?.lat && stop?.lon) return { lat: stop.lat, lon: stop.lon };
+    }
+    if (trip.lat && trip.lon) return { lat: trip.lat, lon: trip.lon };
+    return undefined;
+  })();
   const [error, setError] = useState<string>();
 
   async function save(e: FormEvent) {
@@ -617,6 +629,7 @@ function ActivityFormModal({ tripId, days, existing, defaultDayId, onClose }: {
             onChange={(label) => setLocation(label)}
             placeholder="e.g. Eiffel Tower, Le Meurice Paris…"
             mode="poi"
+            near={nearCoords}
           />
         </Field>
 
@@ -772,9 +785,10 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
           onClose={() => setTransportForm(null)}
         />
       )}
-      {activityForm && (
+      {activityForm && trip && (
         <ActivityFormModal
           tripId={tripId}
+          trip={trip}
           days={days}
           existing={activityForm.activity}
           defaultDayId={activityForm.dayId}
