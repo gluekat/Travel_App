@@ -77,6 +77,12 @@ function ItemsView() {
     }
   }
 
+  async function duplicate(item: ClosetItem) {
+    const { id: _id, ...rest } = item;
+    const now = Date.now();
+    await db.closetItems.add({ ...rest, isSample: false, createdAt: now, updatedAt: now });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -183,10 +189,13 @@ function ItemsView() {
                   </p>
                 </div>
                 <div className="flex shrink-0">
-                  <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(item)} aria-label={`Edit ${item.name}`}>
+                  <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(item)} aria-label={`Edit ${item.name}`} title="Edit">
                     <Icon name="edit" />
                   </button>
-                  <button className="rounded p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => remove(item)} aria-label={`Delete ${item.name}`}>
+                  <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => duplicate(item)} aria-label={`Duplicate ${item.name}`} title="Duplicate">
+                    <Icon name="copy" />
+                  </button>
+                  <button className="rounded p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => remove(item)} aria-label={`Delete ${item.name}`} title="Delete">
                     <Icon name="trash" />
                   </button>
                 </div>
@@ -208,7 +217,15 @@ function ItemsView() {
                     {t}
                   </span>
                 ))}
-                {item.isSample && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">sample</span>}
+                {item.isSample && (
+                  <button
+                    onClick={() => db.closetItems.update(item.id!, { isSample: false, updatedAt: Date.now() })}
+                    className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800 hover:bg-amber-200"
+                    title="Remove sample tag"
+                  >
+                    sample ×
+                  </button>
+                )}
               </div>
             </div>
           </li>
