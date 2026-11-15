@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
-import type { HomeLocation, ScheduledActivity, TransportConnection, TransportLeg, TransportMode, Trip, TripDay } from '../../db/types';
+import type { HomeLocation, ScheduledActivity, TransportConnection, TransportLeg, TransportMode, Trip, TripDay, TripLodging } from '../../db/types';
 import { fmt12h, formatDay, shortLocation } from '../../lib/dates';
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
 import { TimeInput } from '../../components/TimeInput';
@@ -647,6 +647,155 @@ function ActivityFormModal({ tripId, trip, days, existing, defaultDayId, onClose
   );
 }
 
+// ─── Lodging card ─────────────────────────────────────────────────────────────
+
+function LodgingCard({ stay, onEdit, onDelete }: { stay: TripLodging; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">🏨 {stay.name}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-slate-700">
+            <span>{formatDay(stay.checkInDate)}{stay.checkInTime ? ` · ${fmt12h(stay.checkInTime)}` : ''}</span>
+            <span className="text-slate-400">→</span>
+            <span>{formatDay(stay.checkOutDate)}{stay.checkOutTime ? ` · ${fmt12h(stay.checkOutTime)}` : ''}</span>
+          </div>
+          {stay.location && <p className="mt-0.5 text-xs text-slate-500">📍 {stay.location}</p>}
+          {stay.confirmationNumber && (
+            <p className="mt-0.5 text-xs text-slate-500">Conf: {stay.confirmationNumber}</p>
+          )}
+          {stay.phone && <p className="mt-0.5 text-xs text-slate-500">📞 {stay.phone}</p>}
+          {stay.notes && <p className="mt-0.5 text-xs italic text-slate-400">{stay.notes}</p>}
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <button type="button" onClick={onEdit} className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-100">Edit</button>
+          <button type="button" onClick={onDelete} className="rounded px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Lodging form modal ────────────────────────────────────────────────────────
+
+function LodgingFormModal({ tripId, trip, existing, onClose }: {
+  tripId: number;
+  trip: Trip;
+  existing?: TripLodging;
+  onClose: () => void;
+}) {
+  const nearCoords = trip.lat && trip.lon ? { lat: trip.lat, lon: trip.lon } : undefined;
+
+  const [name, setName] = useState(existing?.name ?? '');
+  const [location, setLocation] = useState(existing?.location ?? '');
+  const [checkInDate, setCheckInDate] = useState(existing?.checkInDate ?? trip.startDate);
+  const [checkInTime, setCheckInTime] = useState(existing?.checkInTime ?? '');
+  const [checkOutDate, setCheckOutDate] = useState(existing?.checkOutDate ?? trip.endDate);
+  const [checkOutTime, setCheckOutTime] = useState(existing?.checkOutTime ?? '');
+  const [confirmationNumber, setConfirmationNumber] = useState(existing?.confirmationNumber ?? '');
+  const [phone, setPhone] = useState(existing?.phone ?? '');
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [locationLat, setLocationLat] = useState<number | undefined>(existing?.locationLat);
+  const [locationLon, setLocationLon] = useState<number | undefined>(existing?.locationLon);
+  const [error, setError] = useState<string>();
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setError(undefined);
+    if (!name.trim()) { setError('Lodging name is required.'); return; }
+    if (!checkInDate || !checkOutDate) { setError('Check-in and check-out dates are required.'); return; }
+    if (checkOutDate < checkInDate) { setError('Check-out must be on or after check-in.'); return; }
+    try {
+      const stay: Omit<TripLodging, 'id'> = {
+        tripId,
+        name: name.trim(),
+        location: location.trim() || undefined,
+        locationLat,
+        locationLon,
+        checkInDate,
+        checkInTime: checkInTime || undefined,
+        checkOutDate,
+        checkOutTime: checkOutTime || undefined,
+        confirmationNumber: confirmationNumber.trim() || undefined,
+        phone: phone.trim() || undefined,
+        notes: notes.trim() || undefined,
+        createdAt: existing?.createdAt ?? Date.now(),
+      };
+      if (existing?.id) {
+        await db.tripLodging.update(existing.id, stay);
+      } else {
+        await db.tripLodging.add(stay);
+      }
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  return (
+    <Modal title={existing ? 'Edit lodging' : 'Add lodging'} onClose={onClose}>
+      <form onSubmit={save} className="space-y-3">
+        <Field label="Hotel / lodging name">
+          <input type="text" className={inputClass} value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Marriott Opera Grand" required />
+        </Field>
+
+        <Field label="Address" hint="Search by name or address">
+          <LocationInput
+            value={location}
+            onChange={(label, lat, lon) => { setLocation(label); setLocationLat(lat); setLocationLon(lon); }}
+            placeholder="e.g. Hotel name, street, city…"
+            mode="poi"
+            near={nearCoords}
+          />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Check-in date">
+            <input type="date" className={inputClass} value={checkInDate}
+              onChange={(e) => setCheckInDate(e.target.value)} required />
+          </Field>
+          <Field label="Check-in time" hint="Optional">
+            <TimeInput value={checkInTime} onChange={setCheckInTime} />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Check-out date">
+            <input type="date" className={inputClass} value={checkOutDate}
+              onChange={(e) => setCheckOutDate(e.target.value)} required />
+          </Field>
+          <Field label="Check-out time" hint="Optional">
+            <TimeInput value={checkOutTime} onChange={setCheckOutTime} />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Confirmation #" hint="Optional">
+            <input type="text" className={inputClass} value={confirmationNumber}
+              onChange={(e) => setConfirmationNumber(e.target.value)} placeholder="e.g. ABC123" />
+          </Field>
+          <Field label="Phone" hint="Optional">
+            <input type="tel" className={inputClass} value={phone}
+              onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +1 555 000 1234" />
+          </Field>
+        </div>
+
+        <Field label="Notes" hint="Optional">
+          <textarea className={`${inputClass} resize-none`} rows={2} value={notes}
+            onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+
+        {error && <Banner tone="error">{error}</Banner>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary">{existing ? 'Save changes' : 'Add lodging'}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function ItineraryPage({ tripId }: { tripId: number }) {
@@ -654,6 +803,10 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
   const days = useLiveQuery(() => db.tripDays.where('tripId').equals(tripId).sortBy('date'), [tripId]);
   const transport = useLiveQuery(() => db.tripTransport.where('tripId').equals(tripId).toArray(), [tripId]);
   const activities = useLiveQuery(() => db.tripActivities.where('tripId').equals(tripId).toArray(), [tripId]);
+  const lodging = useLiveQuery(
+    () => db.tripLodging.where('tripId').equals(tripId).sortBy('checkInDate'),
+    [tripId],
+  );
   const homeLocation = useLiveQuery(
     async () => {
       const row = await db.settings.get('homeLocation');
@@ -667,8 +820,9 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
 
   const [transportForm, setTransportForm] = useState<TransportFormState>(null);
   const [activityForm, setActivityForm] = useState<ActivityFormState>(null);
+  const [lodgingForm, setLodgingForm] = useState<TripLodging | null | false>(false); // false=closed, null=new, TripLodging=edit
 
-  if (trip === undefined || days === undefined || transport === undefined || activities === undefined) {
+  if (trip === undefined || days === undefined || transport === undefined || activities === undefined || lodging === undefined) {
     return (
       <div className="space-y-4">
         <TripTabs tripId={tripId} current="itinerary" />
@@ -686,6 +840,19 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
   async function deleteActivity(act: ScheduledActivity) {
     if (!confirm(`Remove "${act.name}"?`)) return;
     await db.tripActivities.delete(act.id!);
+  }
+
+  async function deleteLodging(stay: TripLodging) {
+    if (!confirm(`Remove "${stay.name}"?`)) return;
+    await db.tripLodging.delete(stay.id!);
+  }
+
+  const lastDayDate = days[days.length - 1]?.date;
+
+  const lodgingItems = lodging ?? [];
+
+  function lodgingForNight(date: string): TripLodging | undefined {
+    return lodgingItems.find((s) => s.checkInDate <= date && date < s.checkOutDate);
   }
 
   return (
@@ -722,6 +889,27 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
         })}
       </section>
 
+      {/* ── Lodging ──────────────────────────────────────────────────── */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold text-slate-800">Lodging</h2>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+          {lodgingItems.length === 0 && (
+            <p className="text-sm text-slate-400">No lodging added yet.</p>
+          )}
+          {lodgingItems.map((stay) => (
+            <LodgingCard
+              key={stay.id}
+              stay={stay}
+              onEdit={() => setLodgingForm(stay)}
+              onDelete={() => void deleteLodging(stay)}
+            />
+          ))}
+          <Button variant="ghost" onClick={() => setLodgingForm(null)}>
+            <Icon name="plus" /> Add lodging
+          </Button>
+        </div>
+      </section>
+
       {/* ── Scheduled Activities ─────────────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-base font-semibold text-slate-800">Scheduled Activities</h2>
@@ -731,10 +919,19 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
           const dayActivities = activities
             .filter((a) => a.tripDayId === day.id)
             .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''));
+          const isLastDay = day.date === lastDayDate;
+          const nightStay = isLastDay ? undefined : lodgingForNight(day.date);
 
           return (
             <div key={day.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-              <h3 className="text-sm font-semibold text-slate-700">Day {i + 1} · {formatDay(day.date)}</h3>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                <h3 className="text-sm font-semibold text-slate-700">Day {i + 1} · {formatDay(day.date)}</h3>
+                {!isLastDay && (
+                  nightStay
+                    ? <span className="text-xs text-slate-500">🏨 {nightStay.name}</span>
+                    : <span className="text-xs text-amber-600">🏨 No lodging</span>
+                )}
+              </div>
 
               {dayActivities.length === 0 && (
                 <p className="text-sm text-slate-400">No activities scheduled.</p>
@@ -793,6 +990,14 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
           existing={activityForm.activity}
           defaultDayId={activityForm.dayId}
           onClose={() => setActivityForm(null)}
+        />
+      )}
+      {lodgingForm !== false && (
+        <LodgingFormModal
+          tripId={tripId}
+          trip={trip}
+          existing={lodgingForm ?? undefined}
+          onClose={() => setLodgingForm(false)}
         />
       )}
     </div>

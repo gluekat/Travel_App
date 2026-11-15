@@ -199,6 +199,23 @@ export interface HomeLocation {
   lon: number;
 }
 
+export interface TripLodging {
+  id?: number;
+  tripId: number;
+  name: string;             // "Marriott Opera Grand"
+  location?: string;        // full address string
+  locationLat?: number;
+  locationLon?: number;
+  checkInDate: string;      // YYYY-MM-DD
+  checkInTime?: string;     // HH:mm
+  checkOutDate: string;     // YYYY-MM-DD
+  checkOutTime?: string;    // HH:mm
+  confirmationNumber?: string;
+  phone?: string;
+  notes?: string;
+  createdAt: number;
+}
+
 export interface ScheduledActivity {
   id?: number;
   tripId: number;

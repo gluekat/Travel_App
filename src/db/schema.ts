@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { STORAGE_SUFFIX } from '../lib/channel';
 import { migrateV1toV2, migrateV2toV3, type Tables } from './migrate';
-import type { ClosetItem, Outfit, PackingItem, SavedOutfit, ScheduledActivity, Setting, TransportLeg, Trip, TripDay } from './types';
+import type { ClosetItem, Outfit, PackingItem, SavedOutfit, ScheduledActivity, Setting, TransportLeg, Trip, TripDay, TripLodging } from './types';
 
 export class PackWiseDB extends Dexie {
   closetItems!: EntityTable<ClosetItem, 'id'>;
@@ -13,6 +13,7 @@ export class PackWiseDB extends Dexie {
   savedOutfits!: EntityTable<SavedOutfit, 'id'>;
   tripTransport!: EntityTable<TransportLeg, 'id'>;
   tripActivities!: EntityTable<ScheduledActivity, 'id'>;
+  tripLodging!: EntityTable<TripLodging, 'id'>;
 
   constructor(name = 'packwise') {
     super(name);
@@ -53,6 +54,10 @@ export class PackWiseDB extends Dexie {
       tripTransport: '++id, tripId, direction, mode',
       tripActivities: '++id, tripId, tripDayId',
     });
+    // v5: lodging stays per trip.
+    this.version(5).stores({
+      tripLodging: '++id, tripId, checkInDate',
+    });
   }
 }
 
@@ -68,6 +73,7 @@ export const TABLE_NAMES = [
   'savedOutfits',
   'tripTransport',
   'tripActivities',
+  'tripLodging',
 ] as const;
 export type TableName = (typeof TABLE_NAMES)[number];
 
@@ -82,12 +88,13 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 
 /** Delete a trip and everything hanging off it. */
 export async function deleteTrip(tripId: number): Promise<void> {
-  await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.tripTransport, db.tripActivities], async () => {
+  await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.tripTransport, db.tripActivities, db.tripLodging], async () => {
     await db.tripDays.where('tripId').equals(tripId).delete();
     await db.outfits.where('tripId').equals(tripId).delete();
     await db.packingItems.where('tripId').equals(tripId).delete();
     await db.tripTransport.where('tripId').equals(tripId).delete();
     await db.tripActivities.where('tripId').equals(tripId).delete();
+    await db.tripLodging.where('tripId').equals(tripId).delete();
     await db.trips.delete(tripId);
   });
 }
