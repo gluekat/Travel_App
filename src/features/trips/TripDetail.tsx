@@ -281,20 +281,35 @@ export function TripDetail({ tripId }: { tripId: number }) {
     return result;
   }, [outfits, days, dayDateMap]);
 
-  // Trip-wide total wears per item (Y in "wear X of Y planned")
-  const tripWears = useMemo(() => countWears(outfits ?? []), [outfits]);
+  // Trip-wide total wears per item (Y in "wear X of Y") — counts unique days, not outfit occurrences
+  const tripWears = useMemo(() => {
+    if (!outfits || !days) return new Map<number, number>();
+    const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+    const result = new Map<number, number>();
+    for (const day of sortedDays) {
+      const itemsToday = new Set<number>();
+      for (const o of outfits) {
+        if (dayDateMap.get(o.tripDayId) !== day.date) continue;
+        for (const id of o.itemIds) itemsToday.add(id);
+      }
+      for (const id of itemsToday) result.set(id, (result.get(id) ?? 0) + 1);
+    }
+    return result;
+  }, [outfits, days, dayDateMap]);
 
-  // Trip-wide cumulative wears up to each day (X in "wear X of Y planned")
+  // Trip-wide cumulative wears up to each day (X in "wear X of Y") — counts unique items per day
   const cumulativeByDayId = useMemo(() => {
     if (!outfits || !days) return new Map<number, Map<number, number>>();
     const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
     const result = new Map<number, Map<number, number>>();
     const running = new Map<number, number>();
     for (const day of sortedDays) {
+      const itemsToday = new Set<number>();
       for (const o of outfits) {
         if (dayDateMap.get(o.tripDayId) !== day.date) continue;
-        for (const id of o.itemIds) running.set(id, (running.get(id) ?? 0) + 1);
+        for (const id of o.itemIds) itemsToday.add(id);
       }
+      for (const id of itemsToday) running.set(id, (running.get(id) ?? 0) + 1);
       result.set(day.id!, new Map(running));
     }
     return result;

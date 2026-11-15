@@ -52,8 +52,8 @@ function WearHint({
     const y = tripTotals?.get(item.id!) ?? 0;
     const over = y > cap;
     return (
-      <span className={`text-xs ${over ? 'font-medium text-amber-700' : 'text-slate-500'}`}>
-        wear {x} of {y} planned{over ? ' — needs laundry or more copies' : ''}
+      <span className={`text-xs ${over ? 'font-medium text-amber-600' : 'text-slate-500'}`}>
+        wear {x} of {y}
       </span>
     );
   }
