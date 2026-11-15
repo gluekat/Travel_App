@@ -61,10 +61,11 @@ function HomeLocationCard() {
 }
 
 function HomeAirportCard() {
-  const stored = useLiveQuery(
-    async () => (await db.settings.get('homeAirport'))?.value as string | undefined,
-    [],
-  );
+  // null = loaded with no value; undefined = still loading
+  const stored = useLiveQuery(async () => {
+    const row = await db.settings.get('homeAirport');
+    return row ? (row.value as string) : null;
+  }, []);
 
   async function save(val: string) {
     const trimmed = val.trim().toUpperCase();
@@ -93,7 +94,7 @@ function HomeAirportCard() {
             </div>
           )}
           <input
-            key={stored}
+            key={stored ?? 'empty'}
             type="text"
             className={`${inputClass} w-32 uppercase`}
             defaultValue={stored ?? ''}

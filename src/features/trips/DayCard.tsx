@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { fmt12h, formatDay } from '../../lib/dates';
 import { Button, ChipGroup, Icon, Modal } from '../../components/ui';
 import { db } from '../../db/schema';
+import { ItemThumb } from '../../components/ItemThumb';
 import { OutfitCard } from '../outfits/OutfitCard';
 import { addOutfit, addOutfitFromSaved } from '../outfits/outfitService';
 import { WeatherSummary } from './WeatherSummary';
@@ -31,7 +32,7 @@ interface Props {
 
 /** A trip day: its weather, activities and the outfits you've chosen. */
 export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumulativeUsage, prelaundryUsage, warnings, unit, formatTemp, location, activities }: Props) {
-  const [showSavedPicker, setShowSavedPicker] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const savedOutfits = useLiveQuery(async () => {
     const all = await db.savedOutfits.toArray();
     return all.sort((a, b) => a.name.localeCompare(b.name));
@@ -107,27 +108,16 @@ export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumula
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="ghost" onClick={() => addOutfit(day.tripId, day.id!)}>
+        <Button variant="ghost" onClick={() => setShowAddModal(true)}>
           <Icon name="plus" /> Add outfit
         </Button>
-        <Button variant="ghost" onClick={() => addOutfit(day.tripId, day.id!, 'Sleepwear 🌙')}>
-          🌙 Add sleepwear
-        </Button>
-        {(savedOutfits?.length ?? 0) > 0 && (
-          <Button variant="ghost" onClick={() => setShowSavedPicker(true)}>
-            👗 From saved outfits
-          </Button>
-        )}
       </div>
-      {showSavedPicker && savedOutfits && (
-        <SavedOutfitPicker
-          savedOutfits={savedOutfits}
+      {showAddModal && (
+        <AddOutfitModal
+          day={day}
+          savedOutfits={savedOutfits ?? []}
           closet={closet}
-          onSelect={async (so) => {
-            await addOutfitFromSaved(day.tripId, day.id!, so.itemIds, so.name);
-            setShowSavedPicker(false);
-          }}
-          onClose={() => setShowSavedPicker(false)}
+          onClose={() => setShowAddModal(false)}
         />
       )}
 
@@ -150,16 +140,23 @@ function SavedOutfitPicker({ savedOutfits, closet, onSelect, onClose }: {
       ) : (
         <ul className="space-y-2">
           {savedOutfits.map((so) => {
-            const names = so.itemIds.map((id) => byId.get(id)?.name).filter(Boolean);
+            const items = so.itemIds.map((id) => byId.get(id)).filter((i): i is ClosetItem => !!i);
             return (
               <li key={so.id}>
                 <button
-                  className="flex w-full flex-col gap-0.5 rounded-lg border border-slate-200 p-3 text-left hover:border-teal-500"
+                  className="flex w-full flex-col gap-2 rounded-lg border border-slate-200 p-3 text-left hover:border-teal-500"
                   onClick={() => onSelect(so)}
                 >
                   <span className="text-sm font-medium">{so.name}</span>
-                  {names.length > 0 && (
-                    <span className="text-xs text-slate-500">{names.join(', ')}</span>
+                  {items.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {items.map((item) => (
+                        <div key={item.id} className="flex w-14 flex-col items-center gap-0.5">
+                          <ItemThumb item={item} size="h-14 w-14" />
+                          <span className="w-14 truncate text-center text-[10px] text-slate-500">{item.name}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </button>
               </li>
@@ -167,6 +164,52 @@ function SavedOutfitPicker({ savedOutfits, closet, onSelect, onClose }: {
           })}
         </ul>
       )}
+    </Modal>
+  );
+}
+
+function AddOutfitModal({ day, savedOutfits, closet, onClose }: {
+  day: TripDay;
+  savedOutfits: SavedOutfit[];
+  closet: ClosetItem[];
+  onClose: () => void;
+}) {
+  const [step, setStep] = useState<'choose' | 'saved'>('choose');
+
+  if (step === 'saved') {
+    return (
+      <SavedOutfitPicker
+        savedOutfits={savedOutfits}
+        closet={closet}
+        onSelect={async (so) => {
+          await addOutfitFromSaved(day.tripId, day.id!, so.itemIds, so.name);
+          onClose();
+        }}
+        onClose={onClose}
+      />
+    );
+  }
+
+  const optionClass = 'flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 text-left text-sm hover:border-teal-500 hover:bg-teal-50/50';
+
+  return (
+    <Modal title="Add outfit" onClose={onClose}>
+      <div className="space-y-2">
+        <button className={optionClass} onClick={() => { void addOutfit(day.tripId, day.id!); onClose(); }}>
+          <span className="text-lg">👕</span>
+          <span>New outfit</span>
+        </button>
+        <button className={optionClass} onClick={() => { void addOutfit(day.tripId, day.id!, 'Sleepwear 🌙'); onClose(); }}>
+          <span className="text-lg">🌙</span>
+          <span>Sleepwear</span>
+        </button>
+        {savedOutfits.length > 0 && (
+          <button className={optionClass} onClick={() => setStep('saved')}>
+            <span className="text-lg">👗</span>
+            <span>Add from saved outfits</span>
+          </button>
+        )}
+      </div>
     </Modal>
   );
 }
