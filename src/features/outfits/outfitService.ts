@@ -17,7 +17,7 @@ export function toEngineItem(i: ClosetItem): EngineItem {
     weatherTags: i.weatherTags,
     activities: i.activities,
     quantity: Math.max(1, i.quantity ?? 1),
-    wearCount: Math.max(1, i.wearCount ?? 1),
+    wearCount: i.unlimitedWear ? 9999 : Math.max(1, i.wearCount ?? 1),
     favorite: i.favorite ?? 0,
   };
 }
@@ -120,10 +120,12 @@ export async function fillEmptyDays(tripId: number, formatTemp: (c: number) => s
 
 // --- Manual editing ---------------------------------------------------------
 
-export async function addOutfit(tripId: number, tripDayId: number) {
+export async function addOutfit(tripId: number, tripDayId: number, label?: string) {
   const existing = await db.outfits.where('tripDayId').equals(tripDayId).toArray();
   const rank = existing.reduce((m, o) => Math.max(m, o.rank + 1), 0);
-  return db.outfits.add(emptyOutfit(tripId, tripDayId, rank));
+  const outfit = emptyOutfit(tripId, tripDayId, rank);
+  if (label) outfit.label = label;
+  return db.outfits.add(outfit);
 }
 
 export async function deleteOutfit(outfitId: number) {

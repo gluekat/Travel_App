@@ -7,6 +7,8 @@ export const CATEGORIES = [
   'accessory',
   'swimwear',
   'activewear',
+  'underwear',
+  'pajamas',
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
@@ -31,10 +33,18 @@ export type Activity = (typeof ACTIVITIES)[number];
 
 export type WarmthLevel = 1 | 2 | 3 | 4 | 5;
 
+export const SUBCATEGORIES = ['top', 'bottom', 'one-piece'] as const;
+export type Subcategory = (typeof SUBCATEGORIES)[number];
+
+/** Categories that support a top/bottom/one-piece distinction. */
+export const SUBCATEGORY_CATEGORIES: Category[] = ['activewear', 'underwear', 'pajamas'];
+
 export interface ClosetItem {
   id?: number;
   name: string;
   category: Category;
+  /** For activewear, underwear, and pajamas: 'top' | 'bottom' | 'one-piece'. */
+  subcategory?: Subcategory;
   color: string;
   warmth: WarmthLevel;
   formality: Formality;
@@ -44,6 +54,8 @@ export interface ClosetItem {
   quantity: number;
   /** How many times one copy can be worn before it needs washing. */
   wearCount: number;
+  /** If true, wearCount is ignored — item never triggers an over-worn warning. */
+  unlimitedWear?: boolean;
   /** How much you like wearing it, 0 (neutral) to 5. Suggestions favour higher scores. */
   favorite: number;
   /** Your own labels, e.g. "packable", "wrinkle-free". */

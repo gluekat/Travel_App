@@ -14,6 +14,8 @@ interface Props {
   outfits: Outfit[];
   closet: ClosetItem[];
   usage: Map<number, number>;
+  /** Pre-laundry usage: wear counts from before this laundry day — used in the laundry panel. */
+  prelaundryUsage?: Map<number, number>;
   unit: TempUnit;
   formatTemp: (c: number) => string;
   location?: string;
@@ -21,7 +23,7 @@ interface Props {
 }
 
 /** A trip day: its weather, activities and the outfits you've chosen. */
-export function DayCard({ day, index, outfits, closet, usage, unit, formatTemp, location, activities }: Props) {
+export function DayCard({ day, index, outfits, closet, usage, prelaundryUsage, unit, formatTemp, location, activities }: Props) {
   const sorted = activities ? [...activities].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? '')) : [];
 
   return (
@@ -83,30 +85,45 @@ export function DayCard({ day, index, outfits, closet, usage, unit, formatTemp, 
           <OutfitCard key={o.id} outfit={o} day={day} dayIndex={index} closet={closet} usage={usage} formatTemp={formatTemp} />
         ))}
       </div>
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => addOutfit(day.tripId, day.id!)}>
           <Icon name="plus" /> Add outfit
         </Button>
+        <Button variant="ghost" onClick={() => addOutfit(day.tripId, day.id!, 'Sleepwear 🌙')}>
+          🌙 Add sleepwear
+        </Button>
       </div>
 
-      <LaundrySection day={day} closet={closet} usage={usage} />
+      <LaundrySection day={day} closet={closet} usage={usage} prelaundryUsage={prelaundryUsage} />
     </section>
   );
 }
 
-function LaundrySection({ day, closet, usage }: { day: TripDay; closet: ClosetItem[]; usage: Map<number, number> }) {
+function LaundrySection({ day, closet, usage, prelaundryUsage }: {
+  day: TripDay;
+  closet: ClosetItem[];
+  usage: Map<number, number>;
+  prelaundryUsage?: Map<number, number>;
+}) {
+  // Show what was worn BEFORE this laundry day (what actually needs washing).
+  // Fall back to current usage when no pre-laundry data is available.
+  const displayUsage = prelaundryUsage ?? usage;
+
   const wornItems = useMemo(
-    () => closet.filter((item) => (usage.get(item.id!) ?? 0) > 0),
-    [closet, usage],
+    () => closet.filter((item) => (displayUsage.get(item.id!) ?? 0) > 0),
+    [closet, displayUsage],
   );
+
+  function isSuggested(item: ClosetItem) {
+    if (item.unlimitedWear) return false;
+    return (displayUsage.get(item.id!) ?? 0) >= Math.max(1, item.wearCount - 1);
+  }
 
   async function toggleLaundryDay() {
     if (day.laundryDay) {
       await db.tripDays.update(day.id!, { laundryDay: false, laundryItems: [] });
     } else {
-      const suggested = closet
-        .filter((item) => (usage.get(item.id!) ?? 0) >= Math.max(1, item.wearCount - 1))
-        .map((item) => item.id!);
+      const suggested = closet.filter(isSuggested).map((item) => item.id!);
       await db.tripDays.update(day.id!, { laundryDay: true, laundryItems: suggested });
     }
   }
@@ -120,9 +137,7 @@ function LaundrySection({ day, closet, usage }: { day: TripDay; closet: ClosetIt
   }
 
   async function suggestItems() {
-    const suggested = closet
-      .filter((item) => (usage.get(item.id!) ?? 0) >= Math.max(1, item.wearCount - 1))
-      .map((item) => item.id!);
+    const suggested = closet.filter(isSuggested).map((item) => item.id!);
     await db.tripDays.update(day.id!, { laundryItems: suggested });
   }
 
@@ -164,9 +179,12 @@ function LaundrySection({ day, closet, usage }: { day: TripDay; closet: ClosetIt
           ) : (
             <ul className="space-y-1.5">
               {wornItems.map((item) => {
-                const wears = usage.get(item.id!) ?? 0;
+                const wears = displayUsage.get(item.id!) ?? 0;
                 const checked = day.laundryItems?.includes(item.id!) ?? false;
-                const needsWash = wears >= item.wearCount;
+                const needsWash = !item.unlimitedWear && wears >= item.wearCount;
+                const wearLabel = item.unlimitedWear
+                  ? `${wears} worn`
+                  : `${wears}/${item.wearCount} wear${item.wearCount !== 1 ? 's' : ''}`;
                 return (
                   <li key={item.id} className="flex items-center gap-2 text-xs">
                     <input
@@ -178,9 +196,7 @@ function LaundrySection({ day, closet, usage }: { day: TripDay; closet: ClosetIt
                     <span className={needsWash ? 'font-medium text-amber-700' : 'text-slate-700'}>
                       {item.name}
                     </span>
-                    <span className="text-slate-400">
-                      {wears}/{item.wearCount} wear{item.wearCount !== 1 ? 's' : ''}
-                    </span>
+                    <span className="text-slate-400">{wearLabel}</span>
                     {needsWash && <span className="text-amber-600">⚠️</span>}
                   </li>
                 );

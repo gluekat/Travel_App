@@ -19,10 +19,28 @@ body {
   }
   body {
     background: white;
+    font-size: 12px;
   }
   .print-plain {
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
+  }
+  /* Keep section cards readable but remove decorative shadows */
+  .rounded-xl, .rounded-lg {
+    border-radius: 4px !important;
+    box-shadow: none !important;
+  }
+  /* Prevent sections from splitting across pages */
+  section {
+    break-inside: avoid;
+  }
+  /* Keep each transport/lodging/activity card together */
+  .rounded-lg {
+    break-inside: avoid;
+  }
+  /* Ensure all content is visible (no overflow clipping) */
+  .overflow-auto, .overflow-hidden {
+    overflow: visible !important;
   }
 }

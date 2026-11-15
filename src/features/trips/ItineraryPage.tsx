@@ -182,7 +182,7 @@ function TransportLegCard({ leg, onEdit, onDelete }: { leg: TransportLeg; onEdit
   const nSegs = conns.length + 1;
 
   const cardActions = (
-    <div className="flex shrink-0 gap-1">
+    <div className="no-print flex shrink-0 gap-1">
       <button type="button" onClick={onEdit} className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-100">Edit</button>
       <button type="button" onClick={onDelete} className="rounded px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">Delete</button>
     </div>
@@ -671,7 +671,7 @@ function LodgingCard({ stay, tripCity, onEdit, onDelete }: { stay: TripLodging; 
           {stay.phone && <p className="mt-0.5 text-xs text-slate-500">📞 {stay.phone}</p>}
           {stay.notes && <p className="mt-0.5 text-xs italic text-slate-400">{stay.notes}</p>}
         </div>
-        <div className="flex shrink-0 gap-1">
+        <div className="no-print flex shrink-0 gap-1">
           <button type="button" onClick={onEdit} className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-100">Edit</button>
           <button type="button" onClick={onDelete} className="rounded px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">Delete</button>
         </div>
@@ -866,7 +866,15 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
 
   return (
     <div className="space-y-6">
-      <TripTabs tripId={tripId} current="itinerary" />
+      <div className="flex items-center justify-between gap-2 no-print">
+        <TripTabs tripId={tripId} current="itinerary" />
+        <Button onClick={() => window.print()} title="Print itinerary">
+          <Icon name="printer" /> Print
+        </Button>
+      </div>
+      <div className="hidden print:block">
+        <h1 className="text-xl font-bold">{trip.name ?? trip.placeLabel ?? trip.destination} — Itinerary</h1>
+      </div>
 
       {/* ── Transportation ───────────────────────────────────────────── */}
       <section className="space-y-4">
@@ -890,9 +898,11 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
                   onDelete={() => void deleteTransportLeg(leg)}
                 />
               ))}
-              <Button variant="ghost" onClick={() => setTransportForm({ leg: undefined, direction: dir })}>
-                <Icon name="plus" /> Add {dir} transport
-              </Button>
+              <div className="no-print">
+                <Button variant="ghost" onClick={() => setTransportForm({ leg: undefined, direction: dir })}>
+                  <Icon name="plus" /> Add {dir} transport
+                </Button>
+              </div>
             </div>
           );
         })}
@@ -914,9 +924,11 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
               onDelete={() => void deleteLodging(stay)}
             />
           ))}
-          <Button variant="ghost" onClick={() => setLodgingForm(null)}>
-            <Icon name="plus" /> Add lodging
-          </Button>
+          <div className="no-print">
+            <Button variant="ghost" onClick={() => setLodgingForm(null)}>
+              <Icon name="plus" /> Add lodging
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -966,7 +978,7 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
                       {act.location && <p className="mt-0.5 text-xs text-slate-400">📍 {act.location}</p>}
                       {act.notes && <p className="mt-0.5 text-xs italic text-slate-400">{act.notes}</p>}
                     </div>
-                    <div className="flex shrink-0 gap-1">
+                    <div className="no-print flex shrink-0 gap-1">
                       <button type="button" onClick={() => setActivityForm({ activity: act, dayId: day.id! })}
                         className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-100">Edit</button>
                       <button type="button" onClick={() => void deleteActivity(act)}
@@ -976,9 +988,11 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
                 </div>
               ))}
 
-              <Button variant="ghost" onClick={() => setActivityForm({ activity: undefined, dayId: day.id! })}>
-                <Icon name="plus" /> Add activity
-              </Button>
+              <div className="no-print">
+                <Button variant="ghost" onClick={() => setActivityForm({ activity: undefined, dayId: day.id! })}>
+                  <Icon name="plus" /> Add activity
+                </Button>
+              </div>
             </div>
           );
         })}

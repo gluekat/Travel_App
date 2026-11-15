@@ -46,9 +46,29 @@ function ItemsView() {
   const [category, setCategory] = useState<Category | null>(null);
   const [tag, setTag] = useState<string | null>(null);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [sort, setSort] = useState<'default' | 'name' | 'category' | 'favorite' | 'warmth' | 'formality' | 'weather' | 'activity' | 'customtags'>('default');
   const [editing, setEditing] = useState<ClosetItem | 'new' | null>(null);
 
-  const visible = useMemo(() => filterItems(items ?? [], query, category, tag, favoritesOnly), [items, query, category, tag, favoritesOnly]);
+  const visible = useMemo(() => {
+    const filtered = filterItems(items ?? [], query, category, tag, favoritesOnly);
+    if (sort === 'default') return filtered;
+    return [...filtered].sort((a, b) => {
+      switch (sort) {
+        case 'name': return a.name.localeCompare(b.name);
+        case 'category': return a.category.localeCompare(b.category);
+        case 'favorite': return (b.favorite ?? 0) - (a.favorite ?? 0);
+        case 'warmth': return b.warmth - a.warmth;
+        case 'formality': {
+          const order: Record<string, number> = { casual: 0, 'smart casual': 1, formal: 2 };
+          return (order[a.formality] ?? 0) - (order[b.formality] ?? 0);
+        }
+        case 'weather': return b.weatherTags.length - a.weatherTags.length;
+        case 'activity': return b.activities.length - a.activities.length;
+        case 'customtags': return (b.customTags?.length ?? 0) - (a.customTags?.length ?? 0);
+        default: return 0;
+      }
+    });
+  }, [items, query, category, tag, favoritesOnly, sort]);
   const sampleCount = items?.filter((i) => i.isSample).length ?? 0;
 
   async function remove(item: ClosetItem) {
@@ -117,6 +137,17 @@ function ItemsView() {
               </optgroup>
             )}
           </select>
+          <select className={`${inputClass} sm:w-44`} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort by">
+            <option value="default">Sort: Date added</option>
+            <option value="name">Sort: Name A→Z</option>
+            <option value="category">Sort: Category</option>
+            <option value="favorite">Sort: Favorite ↓</option>
+            <option value="warmth">Sort: Warmth ↓</option>
+            <option value="formality">Sort: Formality</option>
+            <option value="weather">Sort: Weather tags</option>
+            <option value="activity">Sort: Activity tags</option>
+            <option value="customtags">Sort: Custom tags</option>
+          </select>
           <Chip active={favoritesOnly} onClick={() => setFavoritesOnly(!favoritesOnly)}>
             ★ favorites (4+)
           </Chip>
@@ -145,9 +176,9 @@ function ItemsView() {
                     {(item.quantity ?? 1) > 1 && <span className="ml-1 text-sm font-normal text-slate-500">×{item.quantity}</span>}
                   </p>
                   <p className="text-xs capitalize text-slate-500">
-                    {item.category} · {item.color || 'no color'} · warmth {item.warmth} · {item.formality} ·{' '}
+                    {item.category}{item.subcategory ? ` · ${item.subcategory}` : ''} · {item.color || 'no color'} · warmth {item.warmth} · {item.formality} ·{' '}
                     <span className="normal-case">
-                      {item.wearCount ?? 1} wear{(item.wearCount ?? 1) > 1 ? 's' : ''} per wash
+                      {item.unlimitedWear ? '∞ wears per wash' : `${item.wearCount ?? 1} wear${(item.wearCount ?? 1) > 1 ? 's' : ''} per wash`}
                     </span>
                   </p>
                 </div>
