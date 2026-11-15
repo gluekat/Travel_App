@@ -128,6 +128,15 @@ export async function addOutfit(tripId: number, tripDayId: number, label?: strin
   return db.outfits.add(outfit);
 }
 
+export async function addOutfitFromSaved(tripId: number, tripDayId: number, itemIds: number[], label: string) {
+  const existing = await db.outfits.where('tripDayId').equals(tripDayId).toArray();
+  const rank = existing.reduce((m, o) => Math.max(m, o.rank + 1), 0);
+  const outfit = emptyOutfit(tripId, tripDayId, rank);
+  outfit.label = label;
+  outfit.itemIds = [...itemIds];
+  return db.outfits.add(outfit);
+}
+
 export async function deleteOutfit(outfitId: number) {
   const outfit = await db.outfits.get(outfitId);
   if (!outfit) return;

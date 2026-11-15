@@ -1,10 +1,11 @@
-import { ACTIVITIES, type ClosetItem, type Outfit, type ScheduledActivity, type TempUnit, type TripDay } from '../../db/types';
-import { useMemo } from 'react';
+import { ACTIVITIES, type ClosetItem, type Outfit, type SavedOutfit, type ScheduledActivity, type TempUnit, type TripDay } from '../../db/types';
+import { useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { fmt12h, formatDay } from '../../lib/dates';
-import { Button, ChipGroup, Icon } from '../../components/ui';
+import { Button, ChipGroup, Icon, Modal } from '../../components/ui';
 import { db } from '../../db/schema';
 import { OutfitCard } from '../outfits/OutfitCard';
-import { addOutfit } from '../outfits/outfitService';
+import { addOutfit, addOutfitFromSaved } from '../outfits/outfitService';
 import { WeatherSummary } from './WeatherSummary';
 import { setDayActivities } from './tripService';
 
@@ -16,6 +17,8 @@ interface Props {
   usage: Map<number, number>;
   /** Pre-laundry usage: wear counts from before this laundry day — used in the laundry panel. */
   prelaundryUsage?: Map<number, number>;
+  /** Items that first exceeded their wear capacity on this day. */
+  warnings?: string[];
   unit: TempUnit;
   formatTemp: (c: number) => string;
   location?: string;
@@ -23,7 +26,9 @@ interface Props {
 }
 
 /** A trip day: its weather, activities and the outfits you've chosen. */
-export function DayCard({ day, index, outfits, closet, usage, prelaundryUsage, unit, formatTemp, location, activities }: Props) {
+export function DayCard({ day, index, outfits, closet, usage, prelaundryUsage, warnings, unit, formatTemp, location, activities }: Props) {
+  const [showSavedPicker, setShowSavedPicker] = useState(false);
+  const savedOutfits = useLiveQuery(() => db.savedOutfits.orderBy('name').toArray(), []);
   const sorted = activities ? [...activities].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? '')) : [];
 
   return (
@@ -85,6 +90,15 @@ export function DayCard({ day, index, outfits, closet, usage, prelaundryUsage, u
           <OutfitCard key={o.id} outfit={o} day={day} dayIndex={index} closet={closet} usage={usage} formatTemp={formatTemp} />
         ))}
       </div>
+      {(warnings?.length ?? 0) > 0 && (
+        <div className="mt-2 space-y-1">
+          {warnings!.map((w) => (
+            <div key={w} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              ⚠️ {w}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => addOutfit(day.tripId, day.id!)}>
           <Icon name="plus" /> Add outfit
@@ -92,10 +106,61 @@ export function DayCard({ day, index, outfits, closet, usage, prelaundryUsage, u
         <Button variant="ghost" onClick={() => addOutfit(day.tripId, day.id!, 'Sleepwear 🌙')}>
           🌙 Add sleepwear
         </Button>
+        {(savedOutfits?.length ?? 0) > 0 && (
+          <Button variant="ghost" onClick={() => setShowSavedPicker(true)}>
+            👗 From saved outfits
+          </Button>
+        )}
       </div>
+      {showSavedPicker && savedOutfits && (
+        <SavedOutfitPicker
+          savedOutfits={savedOutfits}
+          closet={closet}
+          onSelect={async (so) => {
+            await addOutfitFromSaved(day.tripId, day.id!, so.itemIds, so.name);
+            setShowSavedPicker(false);
+          }}
+          onClose={() => setShowSavedPicker(false)}
+        />
+      )}
 
       <LaundrySection day={day} closet={closet} usage={usage} prelaundryUsage={prelaundryUsage} />
     </section>
+  );
+}
+
+function SavedOutfitPicker({ savedOutfits, closet, onSelect, onClose }: {
+  savedOutfits: SavedOutfit[];
+  closet: ClosetItem[];
+  onSelect: (so: SavedOutfit) => void;
+  onClose: () => void;
+}) {
+  const byId = useMemo(() => new Map(closet.map((c) => [c.id!, c])), [closet]);
+  return (
+    <Modal title="Add from saved outfits" onClose={onClose}>
+      {savedOutfits.length === 0 ? (
+        <p className="text-sm text-slate-500">No saved outfits yet. Save an outfit from any day's outfit card first.</p>
+      ) : (
+        <ul className="space-y-2">
+          {savedOutfits.map((so) => {
+            const names = so.itemIds.map((id) => byId.get(id)?.name).filter(Boolean);
+            return (
+              <li key={so.id}>
+                <button
+                  className="flex w-full flex-col gap-0.5 rounded-lg border border-slate-200 p-3 text-left hover:border-teal-500"
+                  onClick={() => onSelect(so)}
+                >
+                  <span className="text-sm font-medium">{so.name}</span>
+                  {names.length > 0 && (
+                    <span className="text-xs text-slate-500">{names.join(', ')}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Modal>
   );
 }
 
