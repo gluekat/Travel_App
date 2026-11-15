@@ -6,11 +6,12 @@ const directive = (csp: string, name: string) =>
   csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `))?.split(/\s+/).slice(1) ?? [];
 
 describe('content security policy', () => {
-  it('allows network requests only to this site and Open-Meteo', () => {
+  it('allows network requests only to this site, Open-Meteo, and Nominatim', () => {
     expect(ALLOWED_CONNECT_ORIGINS).toEqual([
       'https://geocoding-api.open-meteo.com',
       'https://api.open-meteo.com',
       'https://archive-api.open-meteo.com',
+      'https://nominatim.openstreetmap.org',
     ]);
     expect(directive(WEB_CSP, 'connect-src')).toEqual(["'self'", ...ALLOWED_CONNECT_ORIGINS]);
   });
