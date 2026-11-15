@@ -15,6 +15,10 @@ interface Props {
   outfits: Outfit[];
   closet: ClosetItem[];
   usage: Map<number, number>;
+  /** Trip-wide total wears per item (denominator for ordinal wear hints). */
+  tripTotals: Map<number, number>;
+  /** Trip-wide cumulative wears up to this day (numerator for ordinal wear hints). */
+  cumulativeUsage: Map<number, number>;
   /** Pre-laundry usage: wear counts from before this laundry day — used in the laundry panel. */
   prelaundryUsage?: Map<number, number>;
   /** Items that first exceeded their wear capacity on this day. */
@@ -26,7 +30,7 @@ interface Props {
 }
 
 /** A trip day: its weather, activities and the outfits you've chosen. */
-export function DayCard({ day, index, outfits, closet, usage, prelaundryUsage, warnings, unit, formatTemp, location, activities }: Props) {
+export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumulativeUsage, prelaundryUsage, warnings, unit, formatTemp, location, activities }: Props) {
   const [showSavedPicker, setShowSavedPicker] = useState(false);
   const savedOutfits = useLiveQuery(async () => {
     const all = await db.savedOutfits.toArray();
@@ -90,7 +94,7 @@ export function DayCard({ day, index, outfits, closet, usage, prelaundryUsage, w
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         {outfits.map((o) => (
-          <OutfitCard key={o.id} outfit={o} day={day} dayIndex={index} closet={closet} usage={usage} formatTemp={formatTemp} />
+          <OutfitCard key={o.id} outfit={o} day={day} dayIndex={index} closet={closet} usage={usage} tripTotals={tripTotals} cumulativeUsage={cumulativeUsage} formatTemp={formatTemp} />
         ))}
       </div>
       {(warnings?.length ?? 0) > 0 && (

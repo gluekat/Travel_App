@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ClosetItem, Outfit, TripDay } from '../../db/types';
+import { ItemForm } from '../closet/ItemForm';
 import { capacity } from '../../engine/rules';
 import { swapCandidates } from '../../engine/suggest';
 import { ItemThumb } from '../../components/ItemThumb';
@@ -23,30 +24,44 @@ export interface OutfitCardProps {
   day: TripDay;
   dayIndex: number;
   closet: ClosetItem[];
-  /** Wears planned per item across the whole trip. */
+  /** Cycle-based wears per item (for capacity checks in pickers). */
   usage: Map<number, number>;
+  /** Trip-wide total wears per item (Y in "wear X of Y planned"). */
+  tripTotals: Map<number, number>;
+  /** Trip-wide cumulative wears up to this day (X in "wear X of Y planned"). */
+  cumulativeUsage: Map<number, number>;
   formatTemp: (c: number) => string;
 }
 
 /**
- * Wear availability for an item. In an outfit: "2 of 3 wears planned" across
- * the trip. In pickers: "1 of 3 clean wears left" before adding it.
+ * Wear availability for an item. In an outfit: "wear 1 of 2 planned" (ordinal
+ * trip position). In pickers: "1 of 3 clean wears left" before adding it.
  */
-function WearHint({ item, usage, inThisOutfit }: { item: ClosetItem; usage: Map<number, number>; inThisOutfit: boolean }) {
-  const total = capacity({ quantity: item.quantity ?? 1, wearCount: item.wearCount ?? 1 });
-  const used = usage.get(item.id!) ?? 0;
+function WearHint({
+  item, usage, cumulativeUsage, tripTotals, inThisOutfit,
+}: {
+  item: ClosetItem;
+  usage: Map<number, number>;
+  cumulativeUsage?: Map<number, number>;
+  tripTotals?: Map<number, number>;
+  inThisOutfit: boolean;
+}) {
+  const cap = capacity({ quantity: item.quantity ?? 1, wearCount: item.wearCount ?? 1 });
   if (inThisOutfit) {
-    const over = used > total;
+    const x = cumulativeUsage?.get(item.id!) ?? 0;
+    const y = tripTotals?.get(item.id!) ?? 0;
+    const over = y > cap;
     return (
       <span className={`text-xs ${over ? 'font-medium text-amber-700' : 'text-slate-500'}`}>
-        {used} of {total} wear{total > 1 ? 's' : ''} planned{over ? ': needs laundry or more copies' : ''}
+        wear {x} of {y} planned{over ? ' — needs laundry or more copies' : ''}
       </span>
     );
   }
-  const left = total - used;
+  const usedCycle = usage.get(item.id!) ?? 0;
+  const left = cap - usedCycle;
   return (
     <span className={`text-xs ${left <= 0 ? 'font-medium text-amber-700' : 'text-slate-500'}`}>
-      {left <= 0 ? `no clean wears left (${total} total)` : `${left} of ${total} clean wear${total > 1 ? 's' : ''} left`}
+      {left <= 0 ? `no clean wears left (${cap} total)` : `${left} of ${cap} clean wear${cap > 1 ? 's' : ''} left`}
     </span>
   );
 }
@@ -99,12 +114,13 @@ function SwapDialog({ outfit, day, dayIndex, closet, usage, itemId, onClose }: O
 }
 
 export function OutfitCard(props: OutfitCardProps) {
-  const { outfit, closet, usage } = props;
+  const { outfit, closet, usage, tripTotals, cumulativeUsage } = props;
   const [swapping, setSwapping] = useState<number>();
   const [adding, setAdding] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [label, setLabel] = useState(outfit.label);
+  const [editingItem, setEditingItem] = useState<ClosetItem>();
   const byId = useMemo(() => new Map(closet.map((i) => [i.id!, i])), [closet]);
   const items = outfit.itemIds.map((id) => byId.get(id)).filter((i): i is ClosetItem => !!i);
 
@@ -137,12 +153,16 @@ export function OutfitCard(props: OutfitCardProps) {
             const locked = outfit.lockedItemIds.includes(item.id!);
             return (
               <li key={item.id} className="flex items-center gap-2">
-                <ItemThumb item={item} size="h-10 w-10" />
+                <button className="shrink-0" onClick={() => setEditingItem(item)} title={`Edit ${item.name}`}>
+                  <ItemThumb item={item} size="h-10 w-10" />
+                </button>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{item.name}</p>
+                  <button className="w-full truncate text-left text-sm hover:text-teal-700" onClick={() => setEditingItem(item)}>
+                    {item.name}
+                  </button>
                   <p className="flex flex-wrap gap-x-2">
                     <span className="text-xs capitalize text-slate-500">{item.category}</span>
-                    <WearHint item={item} usage={usage} inThisOutfit />
+                    <WearHint item={item} usage={usage} cumulativeUsage={cumulativeUsage} tripTotals={tripTotals} inThisOutfit />
                   </p>
                 </div>
                 <button
@@ -213,6 +233,11 @@ export function OutfitCard(props: OutfitCardProps) {
       )}
       {swapping != null && <SwapDialog {...props} itemId={swapping} onClose={() => setSwapping(undefined)} />}
       {suggesting && <SuggestPanel {...props} onClose={() => setSuggesting(false)} />}
+      {editingItem && (
+        <Modal title="Edit item" onClose={() => setEditingItem(undefined)}>
+          <ItemForm item={editingItem} onDone={() => setEditingItem(undefined)} />
+        </Modal>
+      )}
     </div>
   );
 }

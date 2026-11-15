@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteClosetItem } from '../../db/schema';
 import { CATEGORIES, WEATHER_TAGS, ACTIVITIES, type Category, type ClosetItem } from '../../db/types';
@@ -7,7 +7,7 @@ import { Stars } from '../../components/Stars';
 import { Tabs } from '../../components/Tabs';
 import { Button, Chip, Icon, Modal, inputClass } from '../../components/ui';
 import { ItemThumb } from '../../components/ItemThumb';
-import { ItemForm } from './ItemForm';
+import { ItemForm, type ItemFormHandle } from './ItemForm';
 import { SavedOutfitsView } from './SavedOutfitsView';
 
 /** Matches built-in weather/activity tags and custom tags (prefixed "#"). */
@@ -48,6 +48,7 @@ function ItemsView() {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [sort, setSort] = useState<'default' | 'name' | 'category' | 'favorite' | 'warmth' | 'formality' | 'weather' | 'activity' | 'customtags'>('default');
   const [editing, setEditing] = useState<ClosetItem | 'new' | null>(null);
+  const editFormRef = useRef<ItemFormHandle>(null);
 
   const visible = useMemo(() => {
     const filtered = filterItems(items ?? [], query, category, tag, favoritesOnly);
@@ -234,8 +235,21 @@ function ItemsView() {
       {items && items.length > 0 && visible.length === 0 && <p className="text-sm text-slate-500">No items match these filters.</p>}
 
       {editing && (
-        <Modal title={editing === 'new' ? 'Add closet item' : 'Edit item'} onClose={() => setEditing(null)}>
-          <ItemForm item={editing === 'new' ? undefined : editing} onDone={() => setEditing(null)} />
+        <Modal
+          title={editing === 'new' ? 'Add closet item' : 'Edit item'}
+          onClose={() => {
+            if (editing !== 'new') {
+              void editFormRef.current?.save();
+            } else {
+              setEditing(null);
+            }
+          }}
+        >
+          <ItemForm
+            ref={editing === 'new' ? undefined : editFormRef}
+            item={editing === 'new' ? undefined : editing}
+            onDone={() => setEditing(null)}
+          />
         </Modal>
       )}
     </div>
