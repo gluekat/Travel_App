@@ -112,7 +112,7 @@ export function SuggestPanel({ outfit, day, dayIndex, closet, usage, formatTemp,
       <div className="space-y-4">
         <div>
           {sleepwear ? (
-            <p className="text-xs text-slate-600">🌙 Sleepwear: pajama tops with bottoms, or one-pieces, from your pajamas.</p>
+            <p className="text-xs text-slate-600">🌙 Sleepwear: a pajama top with a bottom, or a one-piece, optionally with pajama shoes or accessories.</p>
           ) : (
             <>
               <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Outfit for</p>

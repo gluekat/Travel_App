@@ -9,6 +9,8 @@ import { ItemThumb } from '../../components/ItemThumb';
 import { Banner, Button, Chip, Icon, inputClass } from '../../components/ui';
 import { toEngineItem } from '../outfits/outfitService';
 import { TripTabs } from '../trips/TripTabs';
+import { computeOverWorn } from '../trips/wearPlan';
+import { GeneralIcon } from '../closet/GeneralItemsView';
 import { ensureGeneralLibrary, saveToGeneralLibrary } from './generalItemsService';
 
 const COLD_BANDS = new Set<TempBand>(['cold', 'freezing']);
@@ -112,6 +114,10 @@ function GeneralItems({ tripId, rows, days }: { tripId: number; rows: PackingIte
           const qty = generalQty(row, days);
           return (
             <CheckRow key={row.id} row={row}>
+              {(() => {
+                const entry = library?.find((i) => i.name.toLowerCase() === row.customLabel!.toLowerCase());
+                return entry ? <span className="no-print"><GeneralIcon item={entry} size="h-8 w-8" /></span> : null;
+              })()}
               <span className="flex-1 text-sm">
                 {row.customLabel} <span className="font-medium">×{qty}</span>
                 {row.perDay != null && (
@@ -197,7 +203,11 @@ export function PackingPage({ tripId }: { tripId: number }) {
   const stats = packingStats(engineItems, outfits);
   const generalCount = general.reduce((n, r) => n + generalQty(r, days), 0);
   const packedCount = rows.filter((r) => r.packed).length;
-  const short = clothing.filter((c) => c.line.shortfall > 0);
+  const sortedDays = [...tripDays].sort((a, b) => a.date.localeCompare(b.date));
+  const overWorn = computeOverWorn(outfits, tripDays, closet);
+  const exceeded = new Set([...overWorn.values()].flatMap((w) => [...w.itemIds]));
+  const warningDays = sortedDays.map((d, i) => ({ day: d, n: i + 1, warnings: overWorn.get(d.id!) })).filter((x) => x.warnings);
+  const laundryDays = sortedDays.map((d, i) => ({ day: d, n: i + 1 })).filter((x) => x.day.laundryDay);
   const mismatched = weatherMismatches(closet, outfits, tripDays);
   const tripTitle = trip.name ?? trip.placeLabel ?? trip.destination;
 
@@ -239,16 +249,33 @@ export function PackingPage({ tripId }: { tripId: number }) {
         </div>
       </div>
 
-      {short.map(({ item, line }) => (
-        <Banner key={item.id} tone="warn">
-          ⚠️ {item.name}: {line.wears} wears planned, but only {line.wears - line.shortfall} clean ({item.quantity} owned × {item.wearCount} wear
-          {item.wearCount > 1 ? 's' : ''} before washing).
+      {warningDays.map(({ day, n, warnings }) => (
+        <Banner key={day.id} tone="warn">
+          ⚠️ Day {n} ({formatDay(day.date)}): {warnings!.messages.join(' ')}
         </Banner>
       ))}
       {mismatched.size > 0 && (
         <Banner tone="warn">
           ⚠️ Some packed items (marked with <Icon name="alert" className="inline h-3.5 w-3.5 text-amber-600" />) may not suit the forecast — warmth or weather tags don't match the temperature on those days. Review outfits or use <strong>Swap</strong> to find better alternatives.
         </Banner>
+      )}
+
+      {laundryDays.length > 0 && (
+        <section className="print-plain rounded-xl border border-sky-100 bg-sky-50 p-3" aria-label="Laundry plan">
+          <h2 className="text-sm font-semibold text-sky-800">🧺 Laundry planned</h2>
+          <ul className="mt-1 space-y-1 text-sm text-slate-700">
+            {laundryDays.map(({ day, n }) => {
+              const names = (day.laundryItems ?? []).map((id) => byId.get(id)?.name).filter(Boolean);
+              return (
+                <li key={day.id}>
+                  <span className="font-medium">Day {n} ({formatDay(day.date)}):</span>{' '}
+                  {names.length ? `wash ${names.join(', ')}` : 'no items selected yet'}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-1 text-xs text-slate-500">Washed items are available to wear again after each laundry day.</p>
+        </section>
       )}
 
       <GeneralItems tripId={tripId} rows={general} days={days} />
@@ -276,7 +303,7 @@ export function PackingPage({ tripId }: { tripId: number }) {
                   </span>
                   <span className="text-xs text-slate-400">
                     {line.wears} wear{line.wears > 1 ? 's' : ''}
-                    {line.shortfall > 0 && <span className="text-amber-700"> · short {line.shortfall}</span>}
+                    {exceeded.has(item.id!) && <span className="text-amber-700"> · needs laundry or more copies</span>}
                   </span>
                   {mismatched.has(item.id!) && (
                     <span title="May not suit the forecast for one or more days" className="text-amber-500">

@@ -4,10 +4,24 @@ import { db } from '../../db/schema';
 import { ACTIVITIES, type GeneralItem } from '../../db/types';
 import { cleanTags } from '../../db/migrate';
 import { TagInput } from '../../components/TagInput';
+import { suggestEmoji } from '../../lib/emoji';
+import { useObjectUrl } from '../../lib/hooks';
+import { PhotoInput } from './PhotoInput';
 import { Button, Chip, ChipGroup, Field, Icon, Modal, inputClass } from '../../components/ui';
 import { ensureGeneralLibrary } from '../packing/generalItemsService';
 
 const EXTRA_TAG_IDEAS = ['camping', 'outdoors', 'winter', 'international'];
+/** Photo or emoji badge for a general item; renders nothing when it has neither. */
+export function GeneralIcon({ item, size = 'h-10 w-10' }: { item: Pick<GeneralItem, 'photo' | 'emoji' | 'name'>; size?: string }) {
+  const url = useObjectUrl(item.photo);
+  if (!url && !item.emoji) return null;
+  return (
+    <div className={`${size} flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 text-xl`}>
+      {url ? <img src={url} alt={item.name} className="h-full w-full object-cover" /> : <span aria-hidden="true">{item.emoji}</span>}
+    </div>
+  );
+}
+
 const isActivity = (t: string) => (ACTIVITIES as readonly string[]).includes(t);
 
 /** Reusable general packing items (chargers, toiletries…) with Default, activity and custom tags. */
@@ -63,9 +77,12 @@ export function GeneralItemsView() {
         {visible.map((item) => (
           <li key={item.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate font-medium">{item.name}</p>
-                <p className="text-xs text-slate-500">{item.perDay != null ? `${item.perDay} per day` : `×${item.qty ?? 1}`}</p>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <GeneralIcon item={item} />
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{item.name}</p>
+                  <p className="text-xs text-slate-500">{item.perDay != null ? `${item.perDay} per day` : `×${item.qty ?? 1}`}</p>
+                </div>
               </div>
               <div className="flex shrink-0">
                 <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(item)} aria-label={`Edit ${item.name}`} title="Edit">
@@ -102,9 +119,14 @@ function GeneralItemForm({ item, knownTags, onDone }: { item?: GeneralItem; know
   const [name, setName] = useState(item?.name ?? '');
   const [perDay, setPerDay] = useState(item?.perDay != null);
   const [amount, setAmount] = useState(item?.perDay ?? item?.qty ?? 1);
+  const [emoji, setEmoji] = useState(item?.emoji ?? '');
+  const [photo, setPhoto] = useState<Blob | undefined>(item?.photo);
+  const [photoTouched, setPhotoTouched] = useState(false);
   const [isDefault, setIsDefault] = useState(item?.isDefault ?? false);
   const [activityTags, setActivityTags] = useState<string[]>(() => (item?.tags ?? []).filter(isActivity));
   const [customTags, setCustomTags] = useState<string[]>(() => (item?.tags ?? []).filter((t) => !isActivity(t)));
+
+  const suggestions = suggestEmoji(name);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -116,10 +138,11 @@ function GeneralItemForm({ item, knownTags, onDone }: { item?: GeneralItem; know
       qty: perDay ? undefined : n,
       perDay: perDay ? n : undefined,
       isDefault,
+      emoji: emoji.trim() || undefined,
       tags: cleanTags([...activityTags, ...customTags]),
     };
-    if (item?.id != null) await db.generalItems.update(item.id, row);
-    else await db.generalItems.add({ ...row, createdAt: Date.now() });
+    if (item?.id != null) await db.generalItems.update(item.id, photoTouched ? { ...row, photo } : row);
+    else await db.generalItems.add({ ...row, photo, createdAt: Date.now() });
     onDone();
   }
 
@@ -127,6 +150,29 @@ function GeneralItemForm({ item, knownTags, onDone }: { item?: GeneralItem; know
     <form onSubmit={submit} className="space-y-4">
       <Field label="Name">
         <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required autoFocus placeholder="e.g. Phone charger" />
+      </Field>
+      <PhotoInput value={photo} onChange={(b) => { setPhoto(b); setPhotoTouched(true); }} />
+      <Field label="Emoji (optional)" hint="Shown next to the name when there is no photo.">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <input className={`${inputClass} w-24 text-center text-lg`} value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={8} placeholder="🙂" aria-label="Emoji" />
+            {emoji && (
+              <button type="button" className="text-xs text-slate-500 hover:text-red-700" onClick={() => setEmoji('')}>
+                Clear
+              </button>
+            )}
+          </div>
+          {suggestions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5" aria-label="Suggested emoji">
+              <span className="text-xs text-slate-500">Suggestions:</span>
+              {suggestions.map((e) => (
+                <button key={e} type="button" onClick={() => setEmoji(e)} className={`rounded-lg border px-2 py-0.5 text-lg ${emoji === e ? 'border-teal-500 bg-teal-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Quantity">
