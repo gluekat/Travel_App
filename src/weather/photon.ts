@@ -70,3 +70,50 @@ export async function searchPOI(
     })
     .filter((r): r is PhotonResult => r !== null && r.label !== '');
 }
+
+export interface AirportHit {
+  code?: string;
+  name: string;
+  city: string;
+  label: string;
+  lat: number;
+  lon: number;
+}
+
+interface AirportRow extends NominatimRow {
+  class?: string;
+  type?: string;
+  extratags?: { iata?: string };
+}
+
+/** Airports (aerodromes with an IATA code or "airport" in the name) matching a query, via Nominatim. */
+export async function searchAirportsOnline(query: string): Promise<AirportHit[]> {
+  const params = new URLSearchParams({
+    format: 'json',
+    q: `${query} airport`,
+    limit: '10',
+    addressdetails: '1',
+    extratags: '1',
+    'accept-language': 'en',
+    email: 'packwise@app.local',
+  });
+  let res: Response;
+  try {
+    res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+  } catch {
+    return [];
+  }
+  if (!res.ok) return [];
+  const rows = (await res.json()) as AirportRow[];
+  return rows
+    .filter((r) => r.class === 'aeroway' && r.type === 'aerodrome')
+    .map((r): AirportHit | null => {
+      const name = r.name || r.display_name.split(',')[0]?.trim() || '';
+      if (!name) return null;
+      const code = r.extratags?.iata?.toUpperCase();
+      const city = r.address?.city ?? r.address?.town ?? r.address?.village ?? r.address?.municipality ?? '';
+      const label = `${code ? `${code} – ` : ''}${name}${city && !name.includes(city) ? `, ${city}` : ''}`;
+      return { code, name, city, label, lat: parseFloat(r.lat), lon: parseFloat(r.lon) };
+    })
+    .filter((r): r is AirportHit => r !== null);
+}

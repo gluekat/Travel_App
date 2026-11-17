@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { geocode } from '../weather/openMeteo';
-import { searchPOI } from '../weather/photon';
+import { searchAirportsOnline, searchPOI } from '../weather/photon';
+import { airportLabel, searchAirports } from '../lib/airports';
 import { inputClass } from './ui';
 
 interface SearchResult {
@@ -23,17 +24,35 @@ interface Props {
    *   as trip creation; best for transport from/to, home location).
    * 'poi' — business name / address search via Nominatim (best for
    *   activity locations: restaurants, museums, landmarks).
+   * 'airport' — airports by IATA code, name or city: a bundled list of major
+   *   airports first, then Nominatim for smaller ones.
    */
-  mode?: 'place' | 'poi';
+  mode?: 'place' | 'poi' | 'airport';
   /** When mode='poi', bias results toward this location (trip destination). */
   near?: { lat: number; lon: number };
 }
 
 async function runSearch(
   query: string,
-  mode: 'place' | 'poi',
+  mode: 'place' | 'poi' | 'airport',
   near?: { lat: number; lon: number },
 ): Promise<SearchResult[]> {
+  if (mode === 'airport') {
+    const local = searchAirports(query).map((a) => ({
+      name: `${a.code} – ${a.name}`,
+      detail: [a.city, a.country].filter(Boolean).join(', '),
+      label: airportLabel(a),
+      lat: a.lat,
+      lon: a.lon,
+    }));
+    if (local.length >= 5) return local;
+    const online = await searchAirportsOnline(query);
+    const seen = new Set(local.map((l) => l.label.slice(0, 3)));
+    const extra = online
+      .filter((o) => !o.code || !seen.has(o.code))
+      .map((o) => ({ name: o.label, detail: '', label: o.label, lat: o.lat, lon: o.lon }));
+    return [...local, ...extra];
+  }
   if (mode === 'poi') {
     const results = await searchPOI(query, near);
     return results.map((r) => ({ name: r.name, detail: r.address, label: r.label, lat: r.lat, lon: r.lon }));
