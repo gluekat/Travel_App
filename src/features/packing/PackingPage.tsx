@@ -1,14 +1,15 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
-import type { ClosetItem, Outfit, PackingItem, TripDay } from '../../db/types';
+import type { ClosetItem, GeneralItem, Outfit, PackingItem, TripDay } from '../../db/types';
 import { generalQty, groupByCategory, packingStats, packLines, type PackLine } from '../../engine/packing';
 import { warmthNeeds, type TempBand } from '../../engine/rules';
 import { dateRange, formatDay } from '../../lib/dates';
 import { ItemThumb } from '../../components/ItemThumb';
-import { Banner, Button, Icon, inputClass } from '../../components/ui';
+import { Banner, Button, Chip, Icon, inputClass } from '../../components/ui';
 import { toEngineItem } from '../outfits/outfitService';
 import { TripTabs } from '../trips/TripTabs';
+import { ensureGeneralLibrary, saveToGeneralLibrary } from './generalItemsService';
 
 const COLD_BANDS = new Set<TempBand>(['cold', 'freezing']);
 const HOT_BANDS = new Set<TempBand>(['hot', 'warm']);
@@ -45,8 +46,6 @@ function weatherMismatches(items: ClosetItem[], outfits: Outfit[], tripDays: Tri
   return result;
 }
 
-const GENERAL_SUGGESTIONS = ['Phone charger', 'Passport / ID', 'Medications', 'Sunscreen', 'Travel adapter', 'Pajamas'];
-
 function CheckRow({ row, children }: { row: PackingItem; children: ReactNode }) {
   return (
     <li className="flex items-center gap-3 py-1.5">
@@ -79,15 +78,27 @@ function QtyStepper({ value, onChange, label }: { value: number; onChange: (n: n
 /** Trip-level general items (underwear, socks, toiletries…) with quantities. */
 function GeneralItems({ tripId, rows, days }: { tripId: number; rows: PackingItem[]; days: number }) {
   const [label, setLabel] = useState('');
+  const [saveToList, setSaveToList] = useState(false);
+  const [tag, setTag] = useState<string | null>(null);
+  useEffect(() => {
+    void ensureGeneralLibrary();
+  }, []);
+  const library = useLiveQuery(async () => (await db.generalItems.toArray()).sort((a, b) => a.name.localeCompare(b.name)), []);
+  const listed = useMemo(() => new Set((library ?? []).map((i) => i.name.toLowerCase())), [library]);
+  const libraryTags = useMemo(() => [...new Set((library ?? []).flatMap((i) => i.tags))].sort(), [library]);
+  const onTrip = (name: string) => rows.some((r) => r.customLabel?.toLowerCase() === name.toLowerCase());
+  const suggestions = (library ?? []).filter((i) => !onTrip(i.name) && (!tag || i.tags.includes(tag)));
 
-  async function add(name: string) {
+  async function add(name: string, from?: GeneralItem) {
     const clean = name.trim();
-    if (!clean || rows.some((r) => r.customLabel?.toLowerCase() === clean.toLowerCase())) return;
-    await db.packingItems.add({ tripId, customLabel: clean, qty: 1, packed: false });
+    if (!clean || onTrip(clean)) return;
+    const qty = from?.perDay != null ? undefined : (from?.qty ?? 1);
+    await db.packingItems.add({ tripId, customLabel: clean, ...(from?.perDay != null ? { perDay: from.perDay } : { qty }), packed: false });
   }
   async function submit(e: FormEvent) {
     e.preventDefault();
     await add(label);
+    if (saveToList) await saveToGeneralLibrary(label);
     setLabel('');
   }
 
@@ -121,6 +132,15 @@ function GeneralItems({ tripId, rows, days }: { tripId: number; rows: PackingIte
               >
                 {row.perDay != null ? 'per day' : 'fixed'}
               </button>
+              {!listed.has(row.customLabel!.toLowerCase()) && (
+                <button
+                  className="no-print rounded p-1 text-xs text-slate-500 hover:bg-slate-100"
+                  onClick={() => saveToGeneralLibrary(row.customLabel!, row.qty, row.perDay)}
+                  title="Save to your general items list with the Default tag (added to every new trip)"
+                >
+                  Save to my list
+                </button>
+              )}
               <button className="no-print rounded p-1 text-slate-400 hover:text-red-700" onClick={() => db.packingItems.delete(row.id!)} aria-label={`Remove ${row.customLabel}`}>
                 <Icon name="x" />
               </button>
@@ -132,10 +152,24 @@ function GeneralItems({ tripId, rows, days }: { tripId: number; rows: PackingIte
         <input className={inputClass} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Add an item (chargers, pajamas…)" aria-label="New general item" />
         <Button type="submit">Add</Button>
       </form>
+      <label className="no-print mt-1.5 flex items-center gap-2 text-xs text-slate-600">
+        <input type="checkbox" className="h-3.5 w-3.5 accent-teal-700" checked={saveToList} onChange={(e) => setSaveToList(e.target.checked)} />
+        Also save to my general items list (Default tag — added to every new trip)
+      </label>
+      {libraryTags.length > 0 && (
+        <div className="no-print mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-slate-500">Trip type:</span>
+          {libraryTags.map((t) => (
+            <Chip key={t} active={tag === t} onClick={() => setTag(tag === t ? null : t)}>
+              {t}
+            </Chip>
+          ))}
+        </div>
+      )}
       <div className="no-print mt-2 flex flex-wrap gap-1.5">
-        {GENERAL_SUGGESTIONS.filter((s) => !rows.some((r) => r.customLabel === s)).map((s) => (
-          <button key={s} className="rounded-full border border-dashed border-slate-300 px-2.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50" onClick={() => add(s)}>
-            + {s}
+        {suggestions.map((i) => (
+          <button key={i.id} className="rounded-full border border-dashed border-slate-300 px-2.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50" onClick={() => add(i.name, i)}>
+            + {i.name}
           </button>
         ))}
       </div>

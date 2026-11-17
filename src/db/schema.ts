@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { STORAGE_SUFFIX } from '../lib/channel';
 import { migrateV1toV2, migrateV2toV3, type Tables } from './migrate';
-import type { ClosetItem, Outfit, PackingItem, SavedOutfit, ScheduledActivity, Setting, TransportLeg, Trip, TripDay, TripLodging } from './types';
+import type { ClosetItem, GeneralItem, Outfit, PackingItem, SavedOutfit, ScheduledActivity, Setting, TransportLeg, Trip, TripDay, TripLodging } from './types';
 
 export class PackWiseDB extends Dexie {
   closetItems!: EntityTable<ClosetItem, 'id'>;
@@ -14,6 +14,7 @@ export class PackWiseDB extends Dexie {
   tripTransport!: EntityTable<TransportLeg, 'id'>;
   tripActivities!: EntityTable<ScheduledActivity, 'id'>;
   tripLodging!: EntityTable<TripLodging, 'id'>;
+  generalItems!: EntityTable<GeneralItem, 'id'>;
 
   constructor(name = 'packwise') {
     super(name);
@@ -58,6 +59,10 @@ export class PackWiseDB extends Dexie {
     this.version(5).stores({
       tripLodging: '++id, tripId, checkInDate',
     });
+    // v6: reusable general packing items (with Default + activity/custom tags).
+    this.version(6).stores({
+      generalItems: '++id, isDefault, *tags',
+    });
   }
 }
 
@@ -74,6 +79,7 @@ export const TABLE_NAMES = [
   'tripTransport',
   'tripActivities',
   'tripLodging',
+  'generalItems',
 ] as const;
 export type TableName = (typeof TABLE_NAMES)[number];
 

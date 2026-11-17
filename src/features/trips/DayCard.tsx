@@ -6,7 +6,7 @@ import { Button, ChipGroup, Icon, Modal } from '../../components/ui';
 import { db } from '../../db/schema';
 import { ItemThumb } from '../../components/ItemThumb';
 import { OutfitCard } from '../outfits/OutfitCard';
-import { addOutfit, addOutfitFromSaved } from '../outfits/outfitService';
+import { addOutfit, addOutfitFromSaved, addSleepwearOutfit } from '../outfits/outfitService';
 import { WeatherSummary } from './WeatherSummary';
 import { setDayActivities } from './tripService';
 
@@ -24,6 +24,8 @@ interface Props {
   prelaundryUsage?: Map<number, number>;
   /** Items that first exceeded their wear capacity on this day. */
   warnings?: string[];
+  /** Items whose wear allowance is exceeded on this day (their wear count shows in orange). */
+  exceededItemIds?: Set<number>;
   unit: TempUnit;
   formatTemp: (c: number) => string;
   location?: string;
@@ -31,7 +33,7 @@ interface Props {
 }
 
 /** A trip day: its weather, activities and the outfits you've chosen. */
-export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumulativeUsage, prelaundryUsage, warnings, unit, formatTemp, location, activities }: Props) {
+export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumulativeUsage, prelaundryUsage, warnings, exceededItemIds, unit, formatTemp, location, activities }: Props) {
   const [showAddModal, setShowAddModal] = useState(false);
   const savedOutfits = useLiveQuery(async () => {
     const all = await db.savedOutfits.toArray();
@@ -95,7 +97,7 @@ export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumula
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         {outfits.map((o) => (
-          <OutfitCard key={o.id} outfit={o} day={day} dayIndex={index} closet={closet} usage={usage} tripTotals={tripTotals} cumulativeUsage={cumulativeUsage} formatTemp={formatTemp} />
+          <OutfitCard key={o.id} outfit={o} day={day} dayIndex={index} closet={closet} usage={usage} tripTotals={tripTotals} cumulativeUsage={cumulativeUsage} exceededItemIds={exceededItemIds} formatTemp={formatTemp} />
         ))}
       </div>
       {(warnings?.length ?? 0) > 0 && (
@@ -199,7 +201,7 @@ function AddOutfitModal({ day, savedOutfits, closet, onClose }: {
           <span className="text-lg">👕</span>
           <span>New outfit</span>
         </button>
-        <button className={optionClass} onClick={() => { void addOutfit(day.tripId, day.id!, 'Sleepwear 🌙'); onClose(); }}>
+        <button className={optionClass} onClick={() => { void addSleepwearOutfit(day.tripId, day.id!); onClose(); }}>
           <span className="text-lg">🌙</span>
           <span>Sleepwear</span>
         </button>

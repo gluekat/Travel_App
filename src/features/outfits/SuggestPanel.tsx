@@ -7,7 +7,7 @@ import type { SuggestedOutfit } from '../../engine/types';
 import { ItemThumb } from '../../components/ItemThumb';
 import { Stars } from '../../components/Stars';
 import { Banner, Button, ChipGroup, Icon, Modal } from '../../components/ui';
-import { applySuggestion, suggestForOutfit, toEngineDay, toEngineItem } from './outfitService';
+import { applySuggestion, isSleepwearOutfit, suggestForOutfit, toEngineDay, toEngineItem } from './outfitService';
 import type { OutfitCardProps } from './OutfitCard';
 
 function OptionCard({
@@ -76,6 +76,7 @@ export function SuggestPanel({ outfit, day, dayIndex, closet, usage, formatTemp,
   const [options, setOptions] = useState<SuggestedOutfit[]>();
   const saved = useLiveQuery(() => db.savedOutfits.toArray(), []);
   const byId = useMemo(() => new Map(closet.map((i) => [i.id!, i])), [closet]);
+  const sleepwear = isSleepwearOutfit(outfit);
   const locked = outfit.lockedItemIds.filter((id) => outfit.itemIds.includes(id));
 
   useEffect(() => {
@@ -88,7 +89,7 @@ export function SuggestPanel({ outfit, day, dayIndex, closet, usage, formatTemp,
   }, [outfit.id, activities, seed, formatTemp]);
 
   const rankedSaved = useMemo(() => {
-    if (!saved?.length) return [];
+    if (sleepwear || !saved?.length) return [];
     const others = new Map(usage);
     for (const id of outfit.itemIds) others.set(id, (others.get(id) ?? 1) - 1);
     return rankSavedOutfits(
@@ -99,7 +100,7 @@ export function SuggestPanel({ outfit, day, dayIndex, closet, usage, formatTemp,
       others,
       formatTemp,
     ).slice(0, 3);
-  }, [saved, usage, outfit.itemIds, closet, day, dayIndex, activities, formatTemp]);
+  }, [sleepwear, saved, usage, outfit.itemIds, closet, day, dayIndex, activities, formatTemp]);
 
   const use = async (s: SuggestedOutfit) => {
     await applySuggestion(outfit.id!, s);
@@ -110,8 +111,14 @@ export function SuggestPanel({ outfit, day, dayIndex, closet, usage, formatTemp,
     <Modal title={`Suggestions for ${outfit.label}`} onClose={onClose}>
       <div className="space-y-4">
         <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Outfit for</p>
-          <ChipGroup label="Outfit activities" options={ACTIVITIES} value={activities} onChange={setActivities} />
+          {sleepwear ? (
+            <p className="text-xs text-slate-600">🌙 Sleepwear: pajama tops with bottoms, or one-pieces, from your pajamas.</p>
+          ) : (
+            <>
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Outfit for</p>
+              <ChipGroup label="Outfit activities" options={ACTIVITIES} value={activities} onChange={setActivities} />
+            </>
+          )}
           {locked.length > 0 && (
             <p className="mt-2 text-xs text-slate-600">
               🔒 Keeping {locked.map((id) => byId.get(id)?.name).filter(Boolean).join(', ')}.
@@ -121,7 +128,11 @@ export function SuggestPanel({ outfit, day, dayIndex, closet, usage, formatTemp,
         </div>
 
         {!options && <p className="text-sm text-slate-500">Thinking…</p>}
-        {options?.length === 0 && <p className="text-sm text-slate-600">Your closet doesn't have enough items to build an outfit.</p>}
+        {options?.length === 0 && (
+          <p className="text-sm text-slate-600">
+            {sleepwear ? 'No pajamas in your closet yet. Add items in the Pajamas category (set a type: top, bottom or one-piece).' : "Your closet doesn't have enough items to build an outfit."}
+          </p>
+        )}
         {options?.map((o, n) => (
           <OptionCard key={n} testId="suggestion" title={`Option ${n + 1}`} itemIds={o.itemIds} rationale={o.rationale} gaps={o.gaps} byId={byId} onUse={() => use(o)} />
         ))}

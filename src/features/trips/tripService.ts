@@ -1,9 +1,10 @@
 import { db } from '../../db/schema';
-import { defaultGeneralItems, emptyOutfit } from '../../db/migrate';
+import { emptyOutfit } from '../../db/migrate';
 import type { Activity, Trip, TripStop } from '../../db/types';
 import { addDays, dateRange, daysBetween, todayISO } from '../../lib/dates';
 import type { Place } from '../../weather/openMeteo';
 import { syncPacking } from '../outfits/outfitService';
+import { defaultPackingRows, ensureGeneralLibrary } from '../packing/generalItemsService';
 
 export const MAX_TRIP_DAYS = 30;
 
@@ -17,7 +18,8 @@ export async function createTrip(
   const dates = dateRange(startDate, endDate);
   if (!dates.length) throw new Error('End date must be on or after the start date.');
   if (dates.length > MAX_TRIP_DAYS) throw new Error(`Trips can be at most ${MAX_TRIP_DAYS} days.`);
-  return db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems], async () => {
+  await ensureGeneralLibrary();
+  return db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.generalItems], async () => {
     const hasStops = stops && stops.length > 0;
     const tripId = (await db.trips.add({
       destination: destination.trim(),
@@ -37,7 +39,7 @@ export async function createTrip(
       { allKeys: true },
     )) as number[];
     await db.outfits.bulkAdd(dayIds.map((dayId) => emptyOutfit(tripId, dayId)));
-    await db.packingItems.bulkAdd(defaultGeneralItems(tripId));
+    await db.packingItems.bulkAdd(await defaultPackingRows(tripId));
     return tripId;
   });
 }
@@ -97,7 +99,8 @@ export async function duplicateTrip(source: Trip, newStartDate: string, newEndDa
     db.packingItems.where('tripId').equals(source.id!).toArray(),
   ]);
 
-  const newTripId = (await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems], async () => {
+  await ensureGeneralLibrary();
+  const newTripId = (await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.generalItems], async () => {
     // Shift stops by the same offset as the trip's start date
     let newStops: TripStop[] | undefined;
     if (source.stops && source.stops.length > 0) {
@@ -167,7 +170,7 @@ export async function duplicateTrip(source: Trip, newStartDate: string, newEndDa
     if (generals.length) {
       await db.packingItems.bulkAdd(generals.map(({ id: _id, ...p }) => ({ ...p, tripId: id, packed: false })));
     } else {
-      await db.packingItems.bulkAdd(defaultGeneralItems(id));
+      await db.packingItems.bulkAdd(await defaultPackingRows(id));
     }
 
     return id;

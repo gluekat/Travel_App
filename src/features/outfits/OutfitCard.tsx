@@ -3,6 +3,7 @@ import type { ClosetItem, Outfit, TripDay } from '../../db/types';
 import { ItemForm } from '../closet/ItemForm';
 import { capacity } from '../../engine/rules';
 import { swapCandidates } from '../../engine/suggest';
+import { isPajamas, sleepwearSwapCandidates } from '../../engine/sleepwear';
 import { ItemThumb } from '../../components/ItemThumb';
 import { ClosetPicker } from '../../components/ClosetPicker';
 import { Button, Icon, Modal } from '../../components/ui';
@@ -12,6 +13,7 @@ import {
   deleteOutfit,
   removeItemFromOutfit,
   renameOutfit,
+  isSleepwearOutfit,
   swapItem,
   toEngineDay,
   toEngineItem,
@@ -30,6 +32,8 @@ export interface OutfitCardProps {
   tripTotals: Map<number, number>;
   /** Trip-wide cumulative wears up to this day (X in "wear X of Y planned"). */
   cumulativeUsage: Map<number, number>;
+  /** Items whose wear allowance is exceeded on this day. */
+  exceededItemIds?: Set<number>;
   formatTemp: (c: number) => string;
 }
 
@@ -38,21 +42,21 @@ export interface OutfitCardProps {
  * trip position). In pickers: "1 of 3 clean wears left" before adding it.
  */
 function WearHint({
-  item, usage, cumulativeUsage, tripTotals, inThisOutfit,
+  item, usage, cumulativeUsage, tripTotals, exceeded, inThisOutfit,
 }: {
   item: ClosetItem;
   usage: Map<number, number>;
   cumulativeUsage?: Map<number, number>;
   tripTotals?: Map<number, number>;
+  exceeded?: boolean;
   inThisOutfit: boolean;
 }) {
   const cap = capacity({ quantity: item.quantity ?? 1, wearCount: item.wearCount ?? 1 });
   if (inThisOutfit) {
     const x = cumulativeUsage?.get(item.id!) ?? 0;
     const y = tripTotals?.get(item.id!) ?? 0;
-    const over = y > cap;
     return (
-      <span className={`text-xs ${over ? 'font-medium text-amber-600' : 'text-slate-500'}`}>
+      <span className={`text-xs ${exceeded ? 'font-medium text-amber-600' : 'text-slate-500'}`}>
         wear {x} of {y}
       </span>
     );
@@ -71,6 +75,9 @@ function SwapDialog({ outfit, day, dayIndex, closet, usage, itemId, onClose }: O
   const candidates = useMemo(() => {
     const own = new Map(usage);
     for (const id of outfit.itemIds) own.set(id, (own.get(id) ?? 1) - 1);
+    if (isSleepwearOutfit(outfit)) {
+      return sleepwearSwapCandidates(closet.map((c) => ({ ...c, id: c.id! })), outfit.itemIds, itemId, own).map((c) => ({ id: c.id, name: c.name, warmth: closet.find((x) => x.id === c.id)!.warmth, formality: closet.find((x) => x.id === c.id)!.formality }));
+    }
     return swapCandidates(closet.map(toEngineItem), toEngineDay(day, dayIndex), outfit.activities ?? day.activities, outfit.itemIds, itemId, own);
   }, [closet, day, dayIndex, outfit, itemId, usage]);
   const current = byId.get(itemId);
@@ -114,7 +121,7 @@ function SwapDialog({ outfit, day, dayIndex, closet, usage, itemId, onClose }: O
 }
 
 export function OutfitCard(props: OutfitCardProps) {
-  const { outfit, closet, usage, tripTotals, cumulativeUsage } = props;
+  const { outfit, closet, usage, tripTotals, cumulativeUsage, exceededItemIds } = props;
   const [swapping, setSwapping] = useState<number>();
   const [adding, setAdding] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -162,7 +169,7 @@ export function OutfitCard(props: OutfitCardProps) {
                   </button>
                   <p className="flex flex-wrap gap-x-2">
                     <span className="text-xs capitalize text-slate-500">{item.category}</span>
-                    <WearHint item={item} usage={usage} cumulativeUsage={cumulativeUsage} tripTotals={tripTotals} inThisOutfit />
+                    <WearHint item={item} usage={usage} cumulativeUsage={cumulativeUsage} tripTotals={tripTotals} exceeded={exceededItemIds?.has(item.id!)} inThisOutfit />
                   </p>
                 </div>
                 <button
@@ -224,7 +231,7 @@ export function OutfitCard(props: OutfitCardProps) {
       {adding && (
         <ClosetPicker
           title={`Add items to ${outfit.label}`}
-          closet={closet}
+          closet={isSleepwearOutfit(outfit) ? closet.filter(isPajamas) : closet}
           excludeIds={outfit.itemIds}
           hint={(item) => <WearHint item={item} usage={usage} inThisOutfit={false} />}
           onPick={(ids) => addItemsToOutfit(outfit.id!, ids)}

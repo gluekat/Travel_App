@@ -10,6 +10,8 @@ const CATEGORY_EMOJI: Record<string, string> = {
   accessory: '🧢',
   swimwear: '🩱',
   activewear: '🏃',
+  underwear: '🩲',
+  pajamas: '🌙',
 };
 
 /** Square photo thumbnail, falling back to a category glyph. */
