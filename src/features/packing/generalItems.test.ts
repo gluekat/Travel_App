@@ -47,3 +47,36 @@ describe('sleepwear outfits', () => {
     expect(options.flatMap((o) => o.itemIds)).not.toContain(tee);
   });
 });
+
+describe('general categories', () => {
+  it('guesses and sorts by category then name', async () => {
+    const { guessGeneralCategory, compareGeneral } = await import('../../db/types');
+    expect(guessGeneralCategory('Phone charger')).toBe('Electronics');
+    expect(guessGeneralCategory('Ibuprofen')).toBe('Medications');
+    expect(guessGeneralCategory('Hair brush')).toBe('Hair Supplies');
+    expect(guessGeneralCategory('Mystery thing')).toBe('Other');
+    const list = [
+      { category: 'Other', name: 'A' },
+      { category: 'Electronics', name: 'Z cable' },
+      { category: 'Toiletries', name: 'B' },
+      { category: 'Electronics', name: 'A cable' },
+    ].sort(compareGeneral);
+    expect(list.map((i) => i.name)).toEqual(['Toiletries', 'A cable', 'Z cable', 'A'].map((n) => (n === 'Toiletries' ? 'B' : n)));
+  });
+});
+
+describe('lodging follows trip dates', () => {
+  it('extends stays that ran to the old end date and trims ones past a shortened end', async () => {
+    const { setTripDates } = await import('../trips/tripService');
+    const tripId = await createTrip('Rome', undefined, '2026-06-01', '2026-06-03');
+    await db.tripLodging.bulkAdd([
+      { tripId, name: 'Hotel', checkInDate: '2026-06-01', checkOutDate: '2026-06-03', createdAt: 1 },
+    ]);
+    let trip = (await db.trips.get(tripId))!;
+    await setTripDates(trip, '2026-06-01', '2026-06-05');
+    expect((await db.tripLodging.toArray())[0].checkOutDate).toBe('2026-06-05');
+    trip = (await db.trips.get(tripId))!;
+    await setTripDates(trip, '2026-06-01', '2026-06-04');
+    expect((await db.tripLodging.toArray())[0].checkOutDate).toBe('2026-06-04');
+  });
+});

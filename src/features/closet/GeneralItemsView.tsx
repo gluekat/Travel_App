@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
-import { ACTIVITIES, type GeneralItem } from '../../db/types';
+import { ACTIVITIES, GENERAL_CATEGORIES, compareGeneral, generalCategory, guessGeneralCategory, type GeneralCategory, type GeneralItem } from '../../db/types';
 import { cleanTags } from '../../db/migrate';
 import { TagInput } from '../../components/TagInput';
 import { suggestEmoji } from '../../lib/emoji';
@@ -31,10 +31,17 @@ export function GeneralItemsView() {
   }, []);
   const items = useLiveQuery(async () => (await db.generalItems.toArray()).sort((a, b) => a.name.localeCompare(b.name)), []);
   const [tag, setTag] = useState<string | null>(null);
+  const [sort, setSort] = useState<'name' | 'category'>('category');
   const [editing, setEditing] = useState<GeneralItem | 'new' | null>(null);
 
   const allTags = useMemo(() => [...new Set((items ?? []).flatMap((i) => i.tags))].sort(), [items]);
-  const visible = (items ?? []).filter((i) => !tag || (tag === 'default' ? i.isDefault : i.tags.includes(tag)));
+  const visible = (items ?? [])
+    .filter((i) => !tag || (tag === 'default' ? i.isDefault : i.tags.includes(tag)))
+    .sort((a, b) => (sort === 'category' ? compareGeneral({ category: generalCategory(a), name: a.name }, { category: generalCategory(b), name: b.name }) : a.name.localeCompare(b.name)));
+  const groups: [string | null, GeneralItem[]][] =
+    sort === 'category'
+      ? GENERAL_CATEGORIES.map((c) => [c, visible.filter((i) => generalCategory(i) === c)] as [string, GeneralItem[]]).filter(([, list]) => list.length > 0)
+      : [[null, visible]];
 
   async function remove(item: GeneralItem) {
     if (confirm(`Delete "${item.name}" from your general items?`)) await db.generalItems.delete(item.id!);
@@ -52,7 +59,11 @@ export function GeneralItemsView() {
       </div>
 
       {(items?.length ?? 0) > 0 && (
-        <div className="flex flex-wrap gap-1.5" aria-label="Filter by tag">
+        <div className="flex flex-wrap items-center gap-1.5" aria-label="Filter by tag">
+          <select className={`${inputClass} !w-auto`} value={sort} onChange={(e) => setSort(e.target.value as 'name' | 'category')} aria-label="Sort by">
+            <option value="category">Sort: Category</option>
+            <option value="name">Sort: Name A→Z</option>
+          </select>
           <Chip active={tag === null} onClick={() => setTag(null)}>
             all
           </Chip>
@@ -73,8 +84,15 @@ export function GeneralItemsView() {
         </div>
       )}
 
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {visible.map((item) => (
+      {groups.map(([category, list]) => (
+        <section key={category ?? 'all'} className="space-y-2" aria-label={category ?? 'General items'}>
+          {category && (
+            <h2 className="text-sm font-semibold text-slate-700">
+              {category} <span className="font-normal text-slate-400">({list.length})</span>
+            </h2>
+          )}
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {list.map((item) => (
           <li key={item.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
@@ -104,6 +122,8 @@ export function GeneralItemsView() {
           </li>
         ))}
       </ul>
+        </section>
+      ))}
       {items && items.length > 0 && visible.length === 0 && <p className="text-sm text-slate-500">No items have that tag.</p>}
 
       {editing && (
@@ -119,6 +139,7 @@ function GeneralItemForm({ item, knownTags, onDone }: { item?: GeneralItem; know
   const [name, setName] = useState(item?.name ?? '');
   const [perDay, setPerDay] = useState(item?.perDay != null);
   const [amount, setAmount] = useState(item?.perDay ?? item?.qty ?? 1);
+  const [category, setCategory] = useState<GeneralCategory | undefined>(item ? generalCategory(item) : undefined);
   const [emoji, setEmoji] = useState(item?.emoji ?? '');
   const [photo, setPhoto] = useState<Blob | undefined>(item?.photo);
   const [photoTouched, setPhotoTouched] = useState(false);
@@ -138,6 +159,7 @@ function GeneralItemForm({ item, knownTags, onDone }: { item?: GeneralItem; know
       qty: perDay ? undefined : n,
       perDay: perDay ? n : undefined,
       isDefault,
+      category: category ?? guessGeneralCategory(clean),
       emoji: emoji.trim() || undefined,
       tags: cleanTags([...activityTags, ...customTags]),
     };
@@ -173,6 +195,13 @@ function GeneralItemForm({ item, knownTags, onDone }: { item?: GeneralItem; know
             </div>
           )}
         </div>
+      </Field>
+      <Field label="Category" hint={!category && name.trim() ? `Suggested: ${guessGeneralCategory(name)}` : undefined}>
+        <select className={inputClass} value={category ?? guessGeneralCategory(name)} onChange={(e) => setCategory(e.target.value as GeneralCategory)}>
+          {GENERAL_CATEGORIES.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Quantity">

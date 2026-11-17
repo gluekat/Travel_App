@@ -1,6 +1,6 @@
 /** Wear planning shared by the Trip Overview and the Packing checklist, so both show the same problems. */
 import type { ClosetItem, Outfit, TripDay } from '../../db/types';
-import { capacity } from '../../engine/rules';
+import { capacity, warmthNeeds, type TempBand } from '../../engine/rules';
 import { toEngineItem } from '../outfits/outfitService';
 
 export interface DayWarnings {
@@ -44,7 +44,7 @@ export function computeOverWorn(outfits: Outfit[], days: TripDay[], closet: Clos
       const before = prevWears.get(item.id) ?? 0;
       const after = cumWears.get(item.id) ?? 0;
       if (after > cap && before <= cap) {
-        messages.push(`${item.name}: ${after} of ${cap} wear${cap !== 1 ? 's' : ''} used — needs laundry or more copies.`);
+        messages.push(`${item.name}: ${after} of ${cap} wear${cap !== 1 ? 's' : ''} used — needs laundry.`);
         itemIds.add(item.id);
       }
     }
@@ -52,3 +52,39 @@ export function computeOverWorn(outfits: Outfit[], days: TripDay[], closet: Clos
   }
   return result;
 }
+
+const COLD_BANDS = new Set<TempBand>(['cold', 'freezing']);
+const HOT_BANDS = new Set<TempBand>(['hot', 'warm']);
+
+/** Item ids whose warmth or weather tags are a poor fit for at least one day they're worn. */
+export function weatherMismatches(items: ClosetItem[], outfits: Outfit[], tripDays: TripDay[]): Set<number> {
+  const dayWeather = new Map(tripDays.map((d) => [d.id!, d.weather]));
+  const itemDays = new Map<number, TempBand[]>();
+  for (const outfit of outfits) {
+    const w = dayWeather.get(outfit.tripDayId);
+    if (!w) continue;
+    const band = warmthNeeds(w).band;
+    for (const id of outfit.itemIds) {
+      const list = itemDays.get(id) ?? [];
+      list.push(band);
+      itemDays.set(id, list);
+    }
+  }
+  const result = new Set<number>();
+  for (const item of items) {
+    const bands = itemDays.get(item.id!);
+    if (!bands) continue;
+    for (const band of bands) {
+      const tooHeavy = item.warmth >= 4 && HOT_BANDS.has(band);
+      const tooLight = item.warmth <= 2 && COLD_BANDS.has(band);
+      const hotTagCold = item.weatherTags.includes('hot') && COLD_BANDS.has(band);
+      const coldTagHot = item.weatherTags.includes('cold') && HOT_BANDS.has(band);
+      if (tooHeavy || tooLight || hotTagCold || coldTagHot) {
+        result.add(item.id!);
+        break;
+      }
+    }
+  }
+  return result;
+}
+

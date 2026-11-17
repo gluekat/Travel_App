@@ -106,6 +106,8 @@ export interface Trip {
   notes?: TripNotes;
   /** For multi-destination trips (e.g. cruises): ordered stops with individual date ranges. */
   stops?: TripStop[];
+  /** Closet items whose "may not suit the forecast" warning the user cleared for this trip. */
+  dismissedForecast?: number[];
 }
 
 /** How a day's weather was obtained. "cached" is a display state, not stored. */
@@ -177,6 +179,51 @@ export interface PackingItem {
   packed: boolean;
 }
 
+export const GENERAL_CATEGORIES = [
+  'Toiletries',
+  'Electronics',
+  'Medications',
+  'Make-Up',
+  'Hair Supplies',
+  'Documents & Money',
+  'Clothing Basics',
+  'Health & Safety',
+  'Entertainment',
+  'Outdoor & Gear',
+  'Other',
+] as const;
+export type GeneralCategory = (typeof GENERAL_CATEGORIES)[number];
+
+/** Best-guess category from an item's name, e.g. "Phone charger" → Electronics. */
+export function guessGeneralCategory(name: string): GeneralCategory {
+  const n = name.toLowerCase();
+  const rules: [GeneralCategory, RegExp][] = [
+    ['Electronics', /charger|cable|adapter|battery|power bank|phone|laptop|tablet|camera|headphone|earbud|kindle|e-?reader|watch/],
+    ['Medications', /medic|pill|vitamin|prescription|allerg|ibuprofen|aspirin|inhaler|meds?/],
+    ['Make-Up', /make-?up|mascara|lipstick|foundation|concealer|eyeliner|cosmetic|blush|nail/],
+    ['Hair Supplies', /hair|shampoo|conditioner|brush|comb|curling|straighten|flat iron|dryer|bobby|scrunchie/],
+    ['Toiletries', /toiletr|toothbrush|toothpaste|floss|deodorant|soap|razor|shav|sunscreen|lotion|moisturi|cleanser|perfume|cologne|tissue|contacts|lip balm|body wash/],
+    ['Documents & Money', /passport|id|license|visa|ticket|boarding|wallet|cash|credit|insurance|itinerary|document/],
+    ['Health & Safety', /first aid|bandage|sanitizer|mask|thermometer|repellent|bug spray/],
+    ['Clothing Basics', /underwear|socks|jacket|coat|pajama|bra|undershirt|belt|hat|scarf|gloves|swim/],
+    ['Entertainment', /book|game|cards|journal|notebook|pen|puzzle|magazine/],
+    ['Outdoor & Gear', /tent|sleeping|flashlight|headlamp|water bottle|backpack|umbrella|towel|snorkel|cooler|lock|luggage/],
+  ];
+  return rules.find(([, re]) => re.test(n))?.[0] ?? 'Other';
+}
+
+/** The item's category, guessed from its name when none was chosen. */
+export function generalCategory(item: { name: string; category?: string }): GeneralCategory {
+  return (GENERAL_CATEGORIES as readonly string[]).includes(item.category ?? '') ? (item.category as GeneralCategory) : guessGeneralCategory(item.name);
+}
+
+/** Sort key: category order (Other last), then name. */
+export function compareGeneral(a: { category: string; name: string }, b: { category: string; name: string }): number {
+  const ia = GENERAL_CATEGORIES.indexOf(a.category as GeneralCategory);
+  const ib = GENERAL_CATEGORIES.indexOf(b.category as GeneralCategory);
+  return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.name.localeCompare(b.name);
+}
+
 /**
  * A reusable general packing item (chargers, toiletries…) kept in the closet.
  * Items with isDefault are added to the packing list of every new trip.
@@ -192,6 +239,8 @@ export interface GeneralItem {
   isDefault: boolean;
   /** Activity-type and custom tags, e.g. "beach", "camping". */
   tags: string[];
+  /** Category (Toiletries, Electronics…); items without one are treated as guessed from the name. */
+  category?: GeneralCategory;
   /** Optional emoji shown next to the name. */
   emoji?: string;
   /** Optional photo shown next to the name (takes precedence over the emoji). */

@@ -777,6 +777,11 @@ function LodgingFormModal({ tripId, trip, existing, onClose }: {
               onChange={(e) => setCheckOutDate(e.target.value)} required />
             <TimeInput value={checkOutTime} onChange={setCheckOutTime} />
           </div>
+          {checkOutDate !== trip.endDate && (
+            <button type="button" className="mt-1 text-xs text-teal-700 hover:underline" onClick={() => setCheckOutDate(trip.endDate)}>
+              Use the trip's last day ({formatDay(trip.endDate)})
+            </button>
+          )}
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -859,6 +864,10 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
   const lastDayDate = days[days.length - 1]?.date;
 
   const lodgingItems = lodging ?? [];
+  // The stay that ends latest: offer to extend it when nights at the end of the trip have no lodging.
+  const lastStay = lodgingItems.reduce<TripLodging | undefined>((m, s) => (!m || s.checkOutDate > m.checkOutDate ? s : m), undefined);
+  const uncoveredNights = days.filter((d) => d.date !== lastDayDate && !lodgingItems.some((s) => s.checkInDate <= d.date && d.date < s.checkOutDate));
+  const canExtendLastStay = !!lastStay && !!lastDayDate && lastStay.checkOutDate < lastDayDate && uncoveredNights.some((d) => d.date >= lastStay.checkOutDate);
 
   function lodgingForNight(date: string): TripLodging | undefined {
     return lodgingItems.find((s) => s.checkInDate <= date && date < s.checkOutDate);
@@ -924,6 +933,16 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
               onDelete={() => void deleteLodging(stay)}
             />
           ))}
+          {canExtendLastStay && lastStay && (
+            <div className="no-print flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span>
+                {lastStay.name} ends {formatDay(lastStay.checkOutDate)}, but the trip runs to {formatDay(lastDayDate!)}.
+              </span>
+              <Button variant="secondary" onClick={() => void db.tripLodging.update(lastStay.id!, { checkOutDate: lastDayDate! })}>
+                Extend to {formatDay(lastDayDate!)}
+              </Button>
+            </div>
+          )}
           <div className="no-print">
             <Button variant="ghost" onClick={() => setLodgingForm(null)}>
               <Icon name="plus" /> Add lodging

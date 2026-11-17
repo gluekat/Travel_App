@@ -29,7 +29,7 @@ export function filterItems(items: ClosetItem[], query: string, category: Catego
   );
 }
 
-export function ClosetTabs({ current }: { current: ClosetView }) {
+export function ClosetTabs({ current, basePath = '#/closet' }: { current: ClosetView; basePath?: string }) {
   const items = useLiveQuery(() => db.closetItems.filter((i) => !isAccessory(i)).count(), []);
   const outfits = useLiveQuery(() => db.savedOutfits.count(), []);
   const accessories = useLiveQuery(() => db.closetItems.filter(isAccessory).count(), []);
@@ -39,10 +39,10 @@ export function ClosetTabs({ current }: { current: ClosetView }) {
       label="Closet sections"
       current={current}
       tabs={[
-        { id: 'items', label: `Items${items != null ? ` (${items})` : ''}`, href: '#/closet' },
-        { id: 'accessories', label: `Accessories${accessories != null ? ` (${accessories})` : ''}`, href: '#/closet/accessories' },
-        { id: 'general', label: `General${general != null ? ` (${general})` : ''}`, href: '#/closet/general' },
-        { id: 'outfits', label: `Outfits${outfits != null ? ` (${outfits})` : ''}`, href: '#/closet/outfits' },
+        { id: 'items', label: `Items${items != null ? ` (${items})` : ''}`, href: basePath },
+        { id: 'accessories', label: `Accessories${accessories != null ? ` (${accessories})` : ''}`, href: `${basePath}/accessories` },
+        { id: 'general', label: `General${general != null ? ` (${general})` : ''}`, href: `${basePath}/general` },
+        { id: 'outfits', label: `Outfits${outfits != null ? ` (${outfits})` : ''}`, href: `${basePath}/outfits` },
       ]}
     />
   );
@@ -275,11 +275,12 @@ function ItemsView({ scope = 'all' }: { scope?: 'all' | 'accessories' }) {
   );
 }
 
-export function ClosetPage({ view = 'items' }: { view?: ClosetView }) {
+/** The closet. `basePath` lets it be embedded under a trip (e.g. #/trips/3/closet) with its own tab links. */
+export function ClosetPage({ view = 'items', basePath = '#/closet', embedded = false }: { view?: ClosetView; basePath?: string; embedded?: boolean }) {
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Closet</h1>
-      <ClosetTabs current={view} />
+      {!embedded && <h1 className="text-xl font-semibold">Closet</h1>}
+      <ClosetTabs current={view} basePath={basePath} />
       {view === 'outfits' ? <SavedOutfitsView /> : view === 'general' ? <GeneralItemsView /> : <ItemsView key={view} scope={view === 'accessories' ? 'accessories' : 'all'} />}
     </div>
   );

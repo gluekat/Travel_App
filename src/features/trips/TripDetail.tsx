@@ -14,7 +14,8 @@ import { DateRangePicker } from '../../components/DateRangePicker';
 import { PrivacyNote } from '../settings/PrivacyNote';
 import { fillEmptyDays } from '../outfits/outfitService';
 import { DayCard } from './DayCard';
-import { computeOverWorn, countWearDays } from './wearPlan';
+import { computeOverWorn, countWearDays, weatherMismatches } from './wearPlan';
+import { ForecastWarning } from './ForecastWarning';
 import { TripTabs } from './TripTabs';
 import { PlaceSearch } from './PlaceSearch';
 import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace } from './tripService';
@@ -302,6 +303,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
   }, [outfits, days, dayDateMap]);
 
   const overWornByDayId = useMemo(() => (outfits && days && closet ? computeOverWorn(outfits, days, closet) : new Map()), [outfits, days, closet]);
+  const forecastMismatches = useMemo(() => (outfits && days && closet ? weatherMismatches(closet, outfits, days) : new Set<number>()), [outfits, days, closet]);
   const [fillMessage, setFillMessage] = useState<string>();
 
   const hasLocation = (trip?.lat != null && trip?.lon != null) ||
@@ -422,6 +424,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
         {closet.length === 0 && <span className="text-sm text-slate-500">Add items to your closet first.</span>}
       </div>
       {fillMessage && <Banner tone="info">{fillMessage}</Banner>}
+      <ForecastWarning trip={trip} mismatched={forecastMismatches} closet={closet} />
 
       <div className="space-y-3">
         {days.map((d, i) => (

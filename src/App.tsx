@@ -10,6 +10,7 @@ import { TripsPage } from './features/trips/TripsPage';
 import { TripDetail } from './features/trips/TripDetail';
 import { PackingPage } from './features/packing/PackingPage';
 import { ItineraryPage } from './features/trips/ItineraryPage';
+import { TripClosetPage } from './features/trips/TripClosetPage';
 
 const NAV = [
   { path: 'closet', label: 'Closet', icon: 'shirt' },
@@ -18,13 +19,14 @@ const NAV = [
 ] as const;
 
 function Page({ route }: { route: string[] }): ReactNode {
-  const [section = 'trips', id, sub] = route;
+  const [section = 'trips', id, sub, sub2] = route;
   if (section === 'closet') return <ClosetPage view={id === 'outfits' || id === 'accessories' || id === 'general' ? id : 'items'} />;
   if (section === 'settings') return <SettingsPage />;
   if (section === 'trips' && id) {
     const tripId = Number(id);
     if (sub === 'packing') return <PackingPage tripId={tripId} />;
     if (sub === 'itinerary') return <ItineraryPage tripId={tripId} />;
+    if (sub === 'closet') return <TripClosetPage tripId={tripId} view={sub2 === 'outfits' || sub2 === 'accessories' || sub2 === 'general' ? sub2 : 'items'} />;
     return <TripDetail tripId={tripId} />;
   }
   return <TripsPage />;
