@@ -30,7 +30,7 @@ export function filterItems(items: ClosetItem[], query: string, category: Catego
 }
 
 export function ClosetTabs({ current }: { current: ClosetView }) {
-  const items = useLiveQuery(() => db.closetItems.count(), []);
+  const items = useLiveQuery(() => db.closetItems.filter((i) => !isAccessory(i)).count(), []);
   const outfits = useLiveQuery(() => db.savedOutfits.count(), []);
   const accessories = useLiveQuery(() => db.closetItems.filter(isAccessory).count(), []);
   const general = useLiveQuery(() => db.generalItems.count(), []);
@@ -50,7 +50,7 @@ export function ClosetTabs({ current }: { current: ClosetView }) {
 
 function ItemsView({ scope = 'all' }: { scope?: 'all' | 'accessories' }) {
   const allItems = useLiveQuery(() => db.closetItems.orderBy('updatedAt').reverse().toArray(), []);
-  const items = useMemo(() => (scope === 'accessories' ? allItems?.filter(isAccessory) : allItems), [allItems, scope]);
+  const items = useMemo(() => (scope === 'accessories' ? allItems?.filter(isAccessory) : allItems?.filter((i) => !isAccessory(i))), [allItems, scope]);
   const customTags = useLiveQuery(async () => (await db.closetItems.orderBy('customTags').uniqueKeys()) as string[], [], []);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category | null>(null);
@@ -80,7 +80,7 @@ function ItemsView({ scope = 'all' }: { scope?: 'all' | 'accessories' }) {
       }
     });
   }, [items, query, category, tag, favoritesOnly, sort]);
-  const sampleCount = items?.filter((i) => i.isSample).length ?? 0;
+  const sampleCount = allItems?.filter((i) => i.isSample).length ?? 0;
 
   async function remove(item: ClosetItem) {
     if (item.id != null && confirm(`Delete "${item.name}"? It will also be removed from trip and saved outfits.`)) {
