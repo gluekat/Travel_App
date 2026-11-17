@@ -1,52 +1,17 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
-import type { ClosetItem, GeneralItem, Outfit, PackingItem, TripDay } from '../../db/types';
+import { compareGeneral, generalCategory, guessGeneralCategory, type ClosetItem, type GeneralItem, type PackingItem } from '../../db/types';
 import { generalQty, groupByCategory, packingStats, packLines, type PackLine } from '../../engine/packing';
-import { warmthNeeds, type TempBand } from '../../engine/rules';
 import { dateRange, formatDay } from '../../lib/dates';
 import { ItemThumb } from '../../components/ItemThumb';
 import { Banner, Button, Chip, Icon, inputClass } from '../../components/ui';
 import { toEngineItem } from '../outfits/outfitService';
 import { TripTabs } from '../trips/TripTabs';
-import { computeOverWorn } from '../trips/wearPlan';
+import { computeOverWorn, weatherMismatches } from '../trips/wearPlan';
+import { ForecastWarning, visibleForecastItems } from '../trips/ForecastWarning';
 import { GeneralIcon } from '../closet/GeneralItemsView';
 import { ensureGeneralLibrary, saveToGeneralLibrary } from './generalItemsService';
-
-const COLD_BANDS = new Set<TempBand>(['cold', 'freezing']);
-const HOT_BANDS = new Set<TempBand>(['hot', 'warm']);
-
-/** Item ids whose warmth or weather tags are a poor fit for at least one day they're worn. */
-function weatherMismatches(items: ClosetItem[], outfits: Outfit[], tripDays: TripDay[]): Set<number> {
-  const dayWeather = new Map(tripDays.map((d) => [d.id!, d.weather]));
-  const itemDays = new Map<number, TempBand[]>();
-  for (const outfit of outfits) {
-    const w = dayWeather.get(outfit.tripDayId);
-    if (!w) continue;
-    const band = warmthNeeds(w).band;
-    for (const id of outfit.itemIds) {
-      const list = itemDays.get(id) ?? [];
-      list.push(band);
-      itemDays.set(id, list);
-    }
-  }
-  const result = new Set<number>();
-  for (const item of items) {
-    const bands = itemDays.get(item.id!);
-    if (!bands) continue;
-    for (const band of bands) {
-      const tooHeavy = item.warmth >= 4 && HOT_BANDS.has(band);
-      const tooLight = item.warmth <= 2 && COLD_BANDS.has(band);
-      const hotTagCold = item.weatherTags.includes('hot') && COLD_BANDS.has(band);
-      const coldTagHot = item.weatherTags.includes('cold') && HOT_BANDS.has(band);
-      if (tooHeavy || tooLight || hotTagCold || coldTagHot) {
-        result.add(item.id!);
-        break;
-      }
-    }
-  }
-  return result;
-}
 
 function CheckRow({ row, children }: { row: PackingItem; children: ReactNode }) {
   return (
@@ -88,6 +53,16 @@ function GeneralItems({ tripId, rows, days }: { tripId: number; rows: PackingIte
   const library = useLiveQuery(async () => (await db.generalItems.toArray()).sort((a, b) => a.name.localeCompare(b.name)), []);
   const listed = useMemo(() => new Set((library ?? []).map((i) => i.name.toLowerCase())), [library]);
   const libraryTags = useMemo(() => [...new Set((library ?? []).flatMap((i) => i.tags))].sort(), [library]);
+  const sortedRows = useMemo(
+    () =>
+      rows
+        .map((row) => {
+          const entry = library?.find((i) => i.name.toLowerCase() === row.customLabel!.toLowerCase());
+          return { row, category: entry ? generalCategory(entry) : guessGeneralCategory(row.customLabel!) };
+        })
+        .sort((a, b) => compareGeneral({ category: a.category, name: a.row.customLabel! }, { category: b.category, name: b.row.customLabel! })),
+    [rows, library],
+  );
   const onTrip = (name: string) => rows.some((r) => r.customLabel?.toLowerCase() === name.toLowerCase());
   const suggestions = (library ?? []).filter((i) => !onTrip(i.name) && (!tag || i.tags.includes(tag)));
 
@@ -110,10 +85,16 @@ function GeneralItems({ tripId, rows, days }: { tripId: number; rows: PackingIte
         General items <span className="font-normal text-slate-400">(for the whole trip)</span>
       </h2>
       <ul className="divide-y divide-slate-100">
-        {rows.map((row) => {
+        {sortedRows.map(({ row, category }, idx) => {
           const qty = generalQty(row, days);
           return (
-            <CheckRow key={row.id} row={row}>
+            <Fragment key={row.id}>
+              {(idx === 0 || sortedRows[idx - 1].category !== category) && (
+                <li className="pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500" aria-label={`${category} items`}>
+                  {category}
+                </li>
+              )}
+            <CheckRow row={row}>
               {(() => {
                 const entry = library?.find((i) => i.name.toLowerCase() === row.customLabel!.toLowerCase());
                 return entry ? <span className="no-print"><GeneralIcon item={entry} size="h-8 w-8" /></span> : null;
@@ -151,6 +132,7 @@ function GeneralItems({ tripId, rows, days }: { tripId: number; rows: PackingIte
                 <Icon name="x" />
               </button>
             </CheckRow>
+            </Fragment>
           );
         })}
       </ul>
@@ -209,6 +191,7 @@ export function PackingPage({ tripId }: { tripId: number }) {
   const warningDays = sortedDays.map((d, i) => ({ day: d, n: i + 1, warnings: overWorn.get(d.id!) })).filter((x) => x.warnings);
   const laundryDays = sortedDays.map((d, i) => ({ day: d, n: i + 1 })).filter((x) => x.day.laundryDay);
   const mismatched = weatherMismatches(closet, outfits, tripDays);
+  const flagged = visibleForecastItems(mismatched, trip);
   const tripTitle = trip.name ?? trip.placeLabel ?? trip.destination;
 
   return (
@@ -254,11 +237,7 @@ export function PackingPage({ tripId }: { tripId: number }) {
           ⚠️ Day {n} ({formatDay(day.date)}): {warnings!.messages.join(' ')}
         </Banner>
       ))}
-      {mismatched.size > 0 && (
-        <Banner tone="warn">
-          ⚠️ Some packed items (marked with <Icon name="alert" className="inline h-3.5 w-3.5 text-amber-600" />) may not suit the forecast — warmth or weather tags don't match the temperature on those days. Review outfits or use <strong>Swap</strong> to find better alternatives.
-        </Banner>
-      )}
+      <ForecastWarning trip={trip} mismatched={mismatched} closet={closet} />
 
       {laundryDays.length > 0 && (
         <section className="print-plain rounded-xl border border-sky-100 bg-sky-50 p-3" aria-label="Laundry plan">
@@ -303,9 +282,9 @@ export function PackingPage({ tripId }: { tripId: number }) {
                   </span>
                   <span className="text-xs text-slate-400">
                     {line.wears} wear{line.wears > 1 ? 's' : ''}
-                    {exceeded.has(item.id!) && <span className="text-amber-700"> · needs laundry or more copies</span>}
+                    {exceeded.has(item.id!) && <span className="text-amber-700"> · needs laundry</span>}
                   </span>
-                  {mismatched.has(item.id!) && (
+                  {flagged.has(item.id!) && (
                     <span title="May not suit the forecast for one or more days" className="text-amber-500">
                       <Icon name="alert" className="h-4 w-4" />
                     </span>

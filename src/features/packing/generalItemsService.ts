@@ -1,11 +1,11 @@
 import { db, getSetting, setSetting } from '../../db/schema';
-import type { GeneralItem, PackingItem } from '../../db/types';
+import { guessGeneralCategory, type GeneralItem, type PackingItem } from '../../db/types';
 
-const STARTER_ITEMS: Pick<GeneralItem, 'name' | 'qty' | 'perDay'>[] = [
-  { name: 'Underwear', perDay: 1 },
-  { name: 'Socks', perDay: 1 },
-  { name: 'Jacket', qty: 1 },
-  { name: 'Toiletries', qty: 1 },
+const STARTER_ITEMS: Pick<GeneralItem, 'name' | 'qty' | 'perDay' | 'category'>[] = [
+  { name: 'Underwear', perDay: 1, category: 'Clothing Basics' },
+  { name: 'Socks', perDay: 1, category: 'Clothing Basics' },
+  { name: 'Jacket', qty: 1, category: 'Clothing Basics' },
+  { name: 'Toiletries', qty: 1, category: 'Toiletries' },
 ];
 
 let seeding: Promise<void> | undefined;
@@ -47,5 +47,5 @@ export async function saveToGeneralLibrary(name: string, qty?: number, perDay?: 
     await db.generalItems.update(existing.id!, { isDefault: true });
     return;
   }
-  await db.generalItems.add({ name: clean, ...(perDay != null ? { perDay } : { qty: qty ?? 1 }), isDefault: true, tags: [], createdAt: Date.now() });
+  await db.generalItems.add({ name: clean, ...(perDay != null ? { perDay } : { qty: qty ?? 1 }), isDefault: true, tags: [], category: guessGeneralCategory(clean), createdAt: Date.now() });
 }
