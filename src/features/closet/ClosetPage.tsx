@@ -9,6 +9,11 @@ import { Button, Chip, Icon, Modal, inputClass } from '../../components/ui';
 import { ItemThumb } from '../../components/ItemThumb';
 import { ItemForm, type ItemFormHandle } from './ItemForm';
 import { SavedOutfitsView } from './SavedOutfitsView';
+import { GeneralItemsView } from './GeneralItemsView';
+
+export type ClosetView = 'items' | 'outfits' | 'accessories' | 'general';
+
+const isAccessory = (i: ClosetItem) => i.category === 'accessory' || i.subcategory === 'accessories';
 
 /** Matches built-in weather/activity tags and custom tags (prefixed "#"). */
 export function filterItems(items: ClosetItem[], query: string, category: Category | null, tag: string | null, favoritesOnly = false) {
@@ -24,23 +29,28 @@ export function filterItems(items: ClosetItem[], query: string, category: Catego
   );
 }
 
-export function ClosetTabs({ current }: { current: 'items' | 'outfits' }) {
+export function ClosetTabs({ current }: { current: ClosetView }) {
   const items = useLiveQuery(() => db.closetItems.count(), []);
   const outfits = useLiveQuery(() => db.savedOutfits.count(), []);
+  const accessories = useLiveQuery(() => db.closetItems.filter(isAccessory).count(), []);
+  const general = useLiveQuery(() => db.generalItems.count(), []);
   return (
     <Tabs
       label="Closet sections"
       current={current}
       tabs={[
         { id: 'items', label: `Items${items != null ? ` (${items})` : ''}`, href: '#/closet' },
+        { id: 'accessories', label: `Accessories${accessories != null ? ` (${accessories})` : ''}`, href: '#/closet/accessories' },
+        { id: 'general', label: `General${general != null ? ` (${general})` : ''}`, href: '#/closet/general' },
         { id: 'outfits', label: `Outfits${outfits != null ? ` (${outfits})` : ''}`, href: '#/closet/outfits' },
       ]}
     />
   );
 }
 
-function ItemsView() {
-  const items = useLiveQuery(() => db.closetItems.orderBy('updatedAt').reverse().toArray(), []);
+function ItemsView({ scope = 'all' }: { scope?: 'all' | 'accessories' }) {
+  const allItems = useLiveQuery(() => db.closetItems.orderBy('updatedAt').reverse().toArray(), []);
+  const items = useMemo(() => (scope === 'accessories' ? allItems?.filter(isAccessory) : allItems), [allItems, scope]);
   const customTags = useLiveQuery(async () => (await db.closetItems.orderBy('customTags').uniqueKeys()) as string[], [], []);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category | null>(null);
@@ -81,13 +91,13 @@ function ItemsView() {
   async function duplicate(item: ClosetItem) {
     const { id: _id, ...rest } = item;
     const now = Date.now();
-    await db.closetItems.add({ ...rest, isSample: false, createdAt: now, updatedAt: now });
+    await db.closetItems.add({ ...rest, name: `${item.name} (duplicate)`, isSample: false, createdAt: now, updatedAt: now });
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {sampleCount > 0 && (
+        {scope === 'all' && sampleCount > 0 && (
           <Button
             variant="danger"
             onClick={async () => {
@@ -111,16 +121,18 @@ function ItemsView() {
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search closet"
         />
-        <div className="flex flex-wrap gap-1.5" aria-label="Filter by category">
-          <Chip active={!category} onClick={() => setCategory(null)}>
-            all
-          </Chip>
-          {CATEGORIES.map((c) => (
-            <Chip key={c} active={category === c} onClick={() => setCategory(category === c ? null : c)}>
-              {c}
+        {scope === 'all' && (
+          <div className="flex flex-wrap gap-1.5" aria-label="Filter by category">
+            <Chip active={!category} onClick={() => setCategory(null)}>
+              all
             </Chip>
-          ))}
-        </div>
+            {CATEGORIES.map((c) => (
+              <Chip key={c} active={category === c} onClick={() => setCategory(category === c ? null : c)}>
+                {c}
+              </Chip>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <select className={`${inputClass} sm:w-64`} value={tag ?? ''} onChange={(e) => setTag(e.target.value || null)} aria-label="Filter by tag">
             <option value="">Any tag</option>
@@ -163,11 +175,17 @@ function ItemsView() {
 
       {items && items.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">
-          Your closet is empty. Add your first item, or{' '}
-          <button className="font-medium text-teal-700 underline" onClick={() => seedSampleWardrobe()}>
-            load a sample wardrobe
-          </button>
-          .
+          {scope === 'accessories' ? (
+            'No accessories yet. Add a hat, belt, scarf, sunglasses…'
+          ) : (
+            <>
+              Your closet is empty. Add your first item, or{' '}
+              <button className="font-medium text-teal-700 underline" onClick={() => seedSampleWardrobe()}>
+                load a sample wardrobe
+              </button>
+              .
+            </>
+          )}
         </div>
       )}
 
@@ -236,7 +254,7 @@ function ItemsView() {
 
       {editing && (
         <Modal
-          title={editing === 'new' ? 'Add closet item' : 'Edit item'}
+          title={editing === 'new' ? (scope === 'accessories' ? 'Add accessory' : 'Add closet item') : 'Edit item'}
           onClose={() => {
             if (editing !== 'new') {
               void editFormRef.current?.save();
@@ -248,6 +266,7 @@ function ItemsView() {
           <ItemForm
             ref={editing === 'new' ? undefined : editFormRef}
             item={editing === 'new' ? undefined : editing}
+            defaultCategory={scope === 'accessories' ? 'accessory' : undefined}
             onDone={() => setEditing(null)}
           />
         </Modal>
@@ -256,12 +275,12 @@ function ItemsView() {
   );
 }
 
-export function ClosetPage({ view = 'items' }: { view?: 'items' | 'outfits' }) {
+export function ClosetPage({ view = 'items' }: { view?: ClosetView }) {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Closet</h1>
       <ClosetTabs current={view} />
-      {view === 'outfits' ? <SavedOutfitsView /> : <ItemsView />}
+      {view === 'outfits' ? <SavedOutfitsView /> : view === 'general' ? <GeneralItemsView /> : <ItemsView key={view} scope={view === 'accessories' ? 'accessories' : 'all'} />}
     </div>
   );
 }

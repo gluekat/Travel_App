@@ -5,9 +5,9 @@ import {
   ACTIVITIES,
   CATEGORIES,
   FORMALITIES,
-  SUBCATEGORIES,
-  SUBCATEGORY_CATEGORIES,
+  subcategoriesFor,
   WEATHER_TAGS,
+  type Category,
   type ClosetItem,
   type Subcategory,
   type WarmthLevel,
@@ -40,9 +40,9 @@ export interface ItemFormHandle {
   save: () => Promise<void>;
 }
 
-export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; onDone: () => void }>(function ItemForm({ item, onDone }, ref) {
+export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; defaultCategory?: Category; onDone: () => void }>(function ItemForm({ item, defaultCategory, onDone }, ref) {
   const [draft, setDraft] = useState<Draft>(() => {
-    if (!item) return EMPTY;
+    if (!item) return defaultCategory ? { ...EMPTY, category: defaultCategory } : EMPTY;
     const { name, category, color, warmth, formality, weatherTags, activities, photo, quantity = 1, wearCount = 1, favorite = 0, customTags = [], subcategory, unlimitedWear } = item;
     return { name, category, color, warmth, formality, weatherTags, activities, photo, quantity, wearCount, favorite, customTags, subcategory, unlimitedWear };
   });
@@ -100,9 +100,8 @@ export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; onDone: 
           <select className={inputClass} value={draft.category}
             onChange={(e) => {
               set('category', e.target.value as Draft['category']);
-              if (!(SUBCATEGORY_CATEGORIES as string[]).includes(e.target.value)) {
-                set('subcategory', undefined);
-              }
+              const allowed = subcategoriesFor(e.target.value as Draft['category']);
+              if (draft.subcategory && !allowed.includes(draft.subcategory)) set('subcategory', undefined);
             }}>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -112,12 +111,12 @@ export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; onDone: 
         <Field label="Color">
           <input className={inputClass} value={draft.color} onChange={(e) => set('color', e.target.value)} placeholder="e.g. navy" />
         </Field>
-        {(SUBCATEGORY_CATEGORIES as string[]).includes(draft.category) && (
+        {subcategoriesFor(draft.category).length > 0 && (
           <Field label="Type">
             <select className={inputClass} value={draft.subcategory ?? ''}
               onChange={(e) => set('subcategory', (e.target.value as Subcategory) || undefined)}>
               <option value="">— Select type —</option>
-              {SUBCATEGORIES.map((s) => (
+              {subcategoriesFor(draft.category).map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>

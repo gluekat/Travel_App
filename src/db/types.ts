@@ -33,11 +33,18 @@ export type Activity = (typeof ACTIVITIES)[number];
 
 export type WarmthLevel = 1 | 2 | 3 | 4 | 5;
 
-export const SUBCATEGORIES = ['top', 'bottom', 'one-piece'] as const;
+export const SUBCATEGORIES = ['top', 'bottom', 'one-piece', 'shoes', 'accessories'] as const;
 export type Subcategory = (typeof SUBCATEGORIES)[number];
 
-/** Categories that support a top/bottom/one-piece distinction. */
+/** Categories that support a type distinction (top/bottom/one-piece, and for some also shoes/accessories). */
 export const SUBCATEGORY_CATEGORIES: Category[] = ['activewear', 'underwear', 'pajamas'];
+
+/** Type options offered for a category; pajamas and activewear can also be shoes or accessories. */
+export function subcategoriesFor(category: Category): Subcategory[] {
+  if (category === 'pajamas' || category === 'activewear') return [...SUBCATEGORIES];
+  if (category === 'underwear') return ['top', 'bottom', 'one-piece'];
+  return [];
+}
 
 export interface ClosetItem {
   id?: number;
@@ -136,6 +143,8 @@ export interface Outfit {
   /** Activities this outfit is for; undefined = all of the day's activities. */
   activities?: Activity[];
   itemIds: number[];
+  /** True for outfits created with "Sleepwear": only pajamas items are suggested for them. */
+  sleepwear?: boolean;
   /** Items kept when asking for a new suggestion. */
   lockedItemIds: number[];
   /** "Why" text from the last applied suggestion; empty once edited by hand. */
@@ -166,6 +175,24 @@ export interface PackingItem {
   /** General items: quantity per trip day, e.g. underwear = 1 per day. */
   perDay?: number;
   packed: boolean;
+}
+
+/**
+ * A reusable general packing item (chargers, toiletries…) kept in the closet.
+ * Items with isDefault are added to the packing list of every new trip.
+ */
+export interface GeneralItem {
+  id?: number;
+  name: string;
+  /** Fixed quantity (ignored when perDay is set). */
+  qty?: number;
+  /** Quantity per trip day, e.g. underwear = 1 per day. */
+  perDay?: number;
+  /** The "Default" tag: automatically added to every new trip's packing list. */
+  isDefault: boolean;
+  /** Activity-type and custom tags, e.g. "beach", "camping". */
+  tags: string[];
+  createdAt: number;
 }
 
 export interface Setting {

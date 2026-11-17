@@ -4,6 +4,7 @@ import { emptyOutfit } from '../../db/migrate';
 import type { Activity, ClosetItem, Outfit, TripDay } from '../../db/types';
 import { dedupeItemIds, diffPacking } from '../../engine/packing';
 import { countWears, planTrip, suggestOptions } from '../../engine/suggest';
+import { suggestSleepwear } from '../../engine/sleepwear';
 import type { EngineDay, EngineItem, SuggestedOutfit } from '../../engine/types';
 
 export function toEngineItem(i: ClosetItem): EngineItem {
@@ -46,6 +47,19 @@ export function tripUsage(outfits: Outfit[], excludeOutfitId?: number): Map<numb
   return countWears(outfits.filter((o) => o.id !== excludeOutfitId));
 }
 
+export const isSleepwearOutfit = (o: Pick<Outfit, 'sleepwear' | 'label'>) => o.sleepwear === true || /^sleepwear/i.test(o.label);
+
+function sleepwearOptions(closet: ClosetItem[], outfits: Outfit[], excludeOutfitId: number | undefined, seed: number): SuggestedOutfit[] {
+  const sets = suggestSleepwear(closet.map((c) => ({ ...c, id: c.id! })), tripUsage(outfits, excludeOutfitId), seed, 2);
+  return sets.map((itemIds) => ({
+    label: 'Sleepwear 🌙',
+    activities: [],
+    itemIds,
+    rationale: itemIds.length > 1 ? 'A pajama top with a matching bottom.' : 'A one-piece pajama set.',
+    gaps: [],
+  }));
+}
+
 /** Suggestion options for one outfit. Nothing is saved until one is applied. */
 export async function suggestForOutfit(
   outfitId: number,
@@ -55,6 +69,10 @@ export async function suggestForOutfit(
 ): Promise<SuggestedOutfit[]> {
   const outfit = await db.outfits.get(outfitId);
   if (!outfit) return [];
+  if (isSleepwearOutfit(outfit)) {
+    const [closet, outfits] = await Promise.all([db.closetItems.toArray(), db.outfits.where('tripId').equals(outfit.tripId).toArray()]);
+    return sleepwearOptions(closet, outfits, outfitId, seed);
+  }
   const { items, days, outfits } = await loadTrip(outfit.tripId);
   const idx = days.findIndex((d) => d.id === outfit.tripDayId);
   if (idx < 0) return [];
@@ -126,6 +144,24 @@ export async function addOutfit(tripId: number, tripDayId: number, label?: strin
   const outfit = emptyOutfit(tripId, tripDayId, rank);
   if (label) outfit.label = label;
   return db.outfits.add(outfit);
+}
+
+/** Add a sleepwear outfit pre-filled with a pajama top + bottom, or a one-piece, when the closet has them. */
+export async function addSleepwearOutfit(tripId: number, tripDayId: number) {
+  const existing = await db.outfits.where('tripDayId').equals(tripDayId).toArray();
+  const rank = existing.reduce((m, o) => Math.max(m, o.rank + 1), 0);
+  const outfit = emptyOutfit(tripId, tripDayId, rank);
+  outfit.label = 'Sleepwear 🌙';
+  outfit.sleepwear = true;
+  const [closet, outfits] = await Promise.all([db.closetItems.toArray(), db.outfits.where('tripId').equals(tripId).toArray()]);
+  const [best] = sleepwearOptions(closet, outfits, undefined, 0);
+  if (best) {
+    outfit.itemIds = best.itemIds;
+    outfit.rationale = best.rationale;
+  }
+  const id = await db.outfits.add(outfit);
+  await syncPacking(tripId);
+  return id;
 }
 
 export async function addOutfitFromSaved(tripId: number, tripDayId: number, itemIds: number[], label: string) {

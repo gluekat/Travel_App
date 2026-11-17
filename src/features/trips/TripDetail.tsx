@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
-import type { Trip } from '../../db/types';
+import type { Outfit, Trip } from '../../db/types';
 import { addDays, dateRange, daysBetween, formatDay, formatTimestamp, shortLocation } from '../../lib/dates';
 import { useOnline, useTempUnit } from '../../lib/hooks';
 import { navigate } from '../../lib/router';
@@ -12,7 +12,6 @@ import { refreshTripWeather } from '../../weather/tripWeather';
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
 import { DateRangePicker } from '../../components/DateRangePicker';
 import { PrivacyNote } from '../settings/PrivacyNote';
-import { countWears } from '../../engine/suggest';
 import { capacity } from '../../engine/rules';
 import { fillEmptyDays, toEngineItem } from '../outfits/outfitService';
 import { DayCard } from './DayCard';
@@ -58,6 +57,17 @@ function TripNotesSection({ trip }: { trip: Trip }) {
       </div>
     </div>
   );
+}
+
+/** Wears per item counted once per day: an item in two outfits on the same day is one wear. */
+function countWearDays(outfits: Outfit[], dateOf: (tripDayId: number) => string | undefined): Map<number, number> {
+  const daysByItem = new Map<number, Set<string>>();
+  for (const o of outfits) {
+    const date = dateOf(o.tripDayId);
+    if (date === undefined) continue;
+    for (const id of o.itemIds) daysByItem.set(id, (daysByItem.get(id) ?? new Set<string>()).add(date));
+  }
+  return new Map([...daysByItem].map(([id, dates]) => [id, dates.size]));
 }
 
 type WeatherState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ok' } | { kind: 'error'; message: string };
@@ -255,7 +265,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
         const d = dayDateMap.get(o.tripDayId);
         return d !== undefined && d < lday.date && (!prevDate || d >= prevDate);
       });
-      result.set(lday.id!, countWears(relevant));
+      result.set(lday.id!, countWearDays(relevant, (id) => dayDateMap.get(id)));
     }
     return result;
   }, [outfits, days, dayDateMap]);
@@ -276,26 +286,13 @@ export function TripDetail({ tripId }: { tripId: number }) {
         if (nextLaundry !== undefined && d >= nextLaundry) return false;
         return true;
       });
-      result.set(day.id!, countWears(cycleOutfits));
+      result.set(day.id!, countWearDays(cycleOutfits, (id) => dayDateMap.get(id)));
     }
     return result;
   }, [outfits, days, dayDateMap]);
 
   // Trip-wide total wears per item (Y in "wear X of Y") — counts unique days, not outfit occurrences
-  const tripWears = useMemo(() => {
-    if (!outfits || !days) return new Map<number, number>();
-    const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
-    const result = new Map<number, number>();
-    for (const day of sortedDays) {
-      const itemsToday = new Set<number>();
-      for (const o of outfits) {
-        if (dayDateMap.get(o.tripDayId) !== day.date) continue;
-        for (const id of o.itemIds) itemsToday.add(id);
-      }
-      for (const id of itemsToday) result.set(id, (result.get(id) ?? 0) + 1);
-    }
-    return result;
-  }, [outfits, days, dayDateMap]);
+  const tripWears = useMemo(() => countWearDays(outfits ?? [], (id) => dayDateMap.get(id)), [outfits, dayDateMap]);
 
   // Trip-wide cumulative wears up to each day (X in "wear X of Y") — counts unique items per day
   const cumulativeByDayId = useMemo(() => {
@@ -317,30 +314,34 @@ export function TripDetail({ tripId }: { tripId: number }) {
 
   // Per-day capacity warnings: fires on the day an item first exceeds its capacity within a laundry cycle
   const overWornByDayId = useMemo(() => {
-    if (!outfits || !days || !closet) return new Map<number, string[]>();
+    if (!outfits || !days || !closet) return new Map<number, { messages: string[]; itemIds: Set<number> }>();
     const engineItems = closet.map(toEngineItem);
     const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
     const laundryDayDates = new Set(sortedDays.filter((d) => d.laundryDay).map((d) => d.date));
-    const result = new Map<number, string[]>();
+    const result = new Map<number, { messages: string[]; itemIds: Set<number> }>();
     const cumWears = new Map<number, number>();
     for (const day of sortedDays) {
       if (laundryDayDates.has(day.date)) cumWears.clear();
       const prevWears = new Map(cumWears);
+      const wornToday = new Set<number>();
       for (const o of outfits) {
         if (dayDateMap.get(o.tripDayId) !== day.date) continue;
-        for (const id of o.itemIds) cumWears.set(id, (cumWears.get(id) ?? 0) + 1);
+        for (const id of o.itemIds) wornToday.add(id);
       }
-      const warnings: string[] = [];
+      for (const id of wornToday) cumWears.set(id, (cumWears.get(id) ?? 0) + 1);
+      const messages: string[] = [];
+      const itemIds = new Set<number>();
       for (const item of engineItems) {
         if (item.wearCount >= 9999) continue;
         const cap = capacity(item);
         const before = prevWears.get(item.id) ?? 0;
         const after = cumWears.get(item.id) ?? 0;
         if (after > cap && before <= cap) {
-          warnings.push(`${item.name}: ${after} of ${cap} wear${cap !== 1 ? 's' : ''} used — needs laundry or more copies.`);
+          messages.push(`${item.name}: ${after} of ${cap} wear${cap !== 1 ? 's' : ''} used — needs laundry or more copies.`);
+          itemIds.add(item.id);
         }
       }
-      if (warnings.length > 0) result.set(day.id!, warnings);
+      if (messages.length > 0) result.set(day.id!, { messages, itemIds });
     }
     return result;
   }, [outfits, days, closet, dayDateMap]);
@@ -478,7 +479,8 @@ export function TripDetail({ tripId }: { tripId: number }) {
             tripTotals={tripWears}
             cumulativeUsage={cumulativeByDayId.get(d.id!) ?? new Map()}
             prelaundryUsage={d.laundryDay ? prelaundryUsage.get(d.id!) : undefined}
-            warnings={overWornByDayId.get(d.id!)}
+            warnings={overWornByDayId.get(d.id!)?.messages}
+            exceededItemIds={overWornByDayId.get(d.id!)?.itemIds}
             unit={unit}
             formatTemp={fmt}
             activities={activities?.filter((a) => a.tripDayId === d.id)}
