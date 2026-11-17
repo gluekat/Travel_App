@@ -51,13 +51,13 @@ export const isSleepwearOutfit = (o: Pick<Outfit, 'sleepwear' | 'label'>) => o.s
 
 function sleepwearOptions(closet: ClosetItem[], outfits: Outfit[], excludeOutfitId: number | undefined, seed: number): SuggestedOutfit[] {
   const sets = suggestSleepwear(closet.map((c) => ({ ...c, id: c.id! })), tripUsage(outfits, excludeOutfitId), seed, 2);
-  return sets.map((itemIds) => ({
-    label: 'Sleepwear 🌙',
-    activities: [],
-    itemIds,
-    rationale: itemIds.length > 1 ? 'A pajama top with a matching bottom.' : 'A one-piece pajama set.',
-    gaps: [],
-  }));
+  const byId = new Map(closet.map((c) => [c.id!, c]));
+  return sets.map((itemIds) => {
+    const subs = itemIds.map((id) => byId.get(id)?.subcategory);
+    const base = subs.includes('one-piece') || subs.every((x) => x === undefined) ? 'A one-piece pajama set' : 'A pajama top with a bottom';
+    const extras = [subs.includes('shoes') && 'shoes', subs.includes('accessories') && 'accessories'].filter(Boolean).join(' and ');
+    return { label: 'Sleepwear 🌙', activities: [], itemIds, rationale: `${base}${extras ? ` plus pajama ${extras}` : ''}.`, gaps: [] };
+  });
 }
 
 /** Suggestion options for one outfit. Nothing is saved until one is applied. */

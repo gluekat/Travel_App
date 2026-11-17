@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
-import type { Outfit, Trip } from '../../db/types';
+import type { Trip } from '../../db/types';
 import { addDays, dateRange, daysBetween, formatDay, formatTimestamp, shortLocation } from '../../lib/dates';
 import { useOnline, useTempUnit } from '../../lib/hooks';
 import { navigate } from '../../lib/router';
@@ -12,9 +12,9 @@ import { refreshTripWeather } from '../../weather/tripWeather';
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
 import { DateRangePicker } from '../../components/DateRangePicker';
 import { PrivacyNote } from '../settings/PrivacyNote';
-import { capacity } from '../../engine/rules';
-import { fillEmptyDays, toEngineItem } from '../outfits/outfitService';
+import { fillEmptyDays } from '../outfits/outfitService';
 import { DayCard } from './DayCard';
+import { computeOverWorn, countWearDays } from './wearPlan';
 import { TripTabs } from './TripTabs';
 import { PlaceSearch } from './PlaceSearch';
 import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace } from './tripService';
@@ -57,17 +57,6 @@ function TripNotesSection({ trip }: { trip: Trip }) {
       </div>
     </div>
   );
-}
-
-/** Wears per item counted once per day: an item in two outfits on the same day is one wear. */
-function countWearDays(outfits: Outfit[], dateOf: (tripDayId: number) => string | undefined): Map<number, number> {
-  const daysByItem = new Map<number, Set<string>>();
-  for (const o of outfits) {
-    const date = dateOf(o.tripDayId);
-    if (date === undefined) continue;
-    for (const id of o.itemIds) daysByItem.set(id, (daysByItem.get(id) ?? new Set<string>()).add(date));
-  }
-  return new Map([...daysByItem].map(([id, dates]) => [id, dates.size]));
 }
 
 type WeatherState = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ok' } | { kind: 'error'; message: string };
@@ -312,39 +301,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
     return result;
   }, [outfits, days, dayDateMap]);
 
-  // Per-day capacity warnings: fires on the day an item first exceeds its capacity within a laundry cycle
-  const overWornByDayId = useMemo(() => {
-    if (!outfits || !days || !closet) return new Map<number, { messages: string[]; itemIds: Set<number> }>();
-    const engineItems = closet.map(toEngineItem);
-    const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
-    const laundryDayDates = new Set(sortedDays.filter((d) => d.laundryDay).map((d) => d.date));
-    const result = new Map<number, { messages: string[]; itemIds: Set<number> }>();
-    const cumWears = new Map<number, number>();
-    for (const day of sortedDays) {
-      if (laundryDayDates.has(day.date)) cumWears.clear();
-      const prevWears = new Map(cumWears);
-      const wornToday = new Set<number>();
-      for (const o of outfits) {
-        if (dayDateMap.get(o.tripDayId) !== day.date) continue;
-        for (const id of o.itemIds) wornToday.add(id);
-      }
-      for (const id of wornToday) cumWears.set(id, (cumWears.get(id) ?? 0) + 1);
-      const messages: string[] = [];
-      const itemIds = new Set<number>();
-      for (const item of engineItems) {
-        if (item.wearCount >= 9999) continue;
-        const cap = capacity(item);
-        const before = prevWears.get(item.id) ?? 0;
-        const after = cumWears.get(item.id) ?? 0;
-        if (after > cap && before <= cap) {
-          messages.push(`${item.name}: ${after} of ${cap} wear${cap !== 1 ? 's' : ''} used — needs laundry or more copies.`);
-          itemIds.add(item.id);
-        }
-      }
-      if (messages.length > 0) result.set(day.id!, { messages, itemIds });
-    }
-    return result;
-  }, [outfits, days, closet, dayDateMap]);
+  const overWornByDayId = useMemo(() => (outfits && days && closet ? computeOverWorn(outfits, days, closet) : new Map()), [outfits, days, closet]);
   const [fillMessage, setFillMessage] = useState<string>();
 
   const hasLocation = (trip?.lat != null && trip?.lon != null) ||

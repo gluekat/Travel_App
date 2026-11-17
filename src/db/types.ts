@@ -192,6 +192,10 @@ export interface GeneralItem {
   isDefault: boolean;
   /** Activity-type and custom tags, e.g. "beach", "camping". */
   tags: string[];
+  /** Optional emoji shown next to the name. */
+  emoji?: string;
+  /** Optional photo shown next to the name (takes precedence over the emoji). */
+  photo?: Blob;
   createdAt: number;
 }
 

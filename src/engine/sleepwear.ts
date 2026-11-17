@@ -1,7 +1,7 @@
 /**
- * Sleepwear outfits draw only from items in the "pajamas" category: a top with a
- * bottom, or a one-piece. Pajama shoes/accessories are never added by default but
- * are the only shoes/accessories offered when swapping or adding items.
+ * Sleepwear outfits draw only from items in the "pajamas" category. The default
+ * suggestion is a top with a bottom, or a one-piece; further suggestions add pajama
+ * shoes and/or accessories to those sets.
  */
 import type { Subcategory } from '../db/types';
 
@@ -35,16 +35,22 @@ export function suggestSleepwear(items: SleepwearItem[], usage: Map<number, numb
   const bottoms = pool.filter((i) => i.subcategory === 'bottom');
   // Untyped pajamas are treated as complete sets rather than guessed at.
   const wholes = pool.filter((i) => i.subcategory === 'one-piece' || i.subcategory === undefined);
+  const shoes = pool.find((i) => i.subcategory === 'shoes');
+  const accessory = pool.find((i) => i.subcategory === 'accessories');
 
-  const sets: { ids: number[]; score: number }[] = [];
   const score = (list: SleepwearItem[]) =>
     list.reduce((n, i) => n + (i.favorite ?? 0) + (remaining(i, usage) > 0 ? 10 : 0), 0) / list.length;
-  for (const w of wholes) sets.push({ ids: [w.id], score: score([w]) });
-  for (const t of tops) for (const b of bottoms) sets.push({ ids: [t.id, b.id], score: score([t, b]) });
-  sets.sort((a, b) => b.score - a.score);
+  const bases: { items: SleepwearItem[]; score: number }[] = [];
+  for (const w of wholes) bases.push({ items: [w], score: score([w]) });
+  for (const t of tops) for (const b of bottoms) bases.push({ items: [t, b], score: score([t, b]) });
+  bases.sort((a, b) => b.score - a.score);
+
+  // Plain sets first (the default is always a plain set), then the same sets with shoes and/or accessories.
+  const extras = [shoes && [shoes], accessory && [accessory], shoes && accessory && [shoes, accessory]].filter((e): e is SleepwearItem[] => !!e);
+  const sets = [...bases.map((b) => b.items.map((i) => i.id)), ...bases.flatMap((b) => extras.map((e) => [...b.items, ...e].map((i) => i.id)))];
   if (sets.length === 0) return [];
   const start = (seed * count) % sets.length;
-  return Array.from({ length: Math.min(count, sets.length) }, (_, k) => sets[(start + k) % sets.length].ids);
+  return Array.from({ length: Math.min(count, sets.length) }, (_, k) => sets[(start + k) % sets.length]);
 }
 
 /** Replacement candidates for one sleepwear piece: other pajamas of the same type, best first. */
