@@ -261,8 +261,12 @@ export type TransportMode = 'drive' | 'fly' | 'train' | 'boat';
 export interface TransportConnection {
   point: string;       // airport code/name, station, or port
   arrive?: string;     // HH:mm — arrival at this connection point
+  arriveDate?: string; // YYYY-MM-DD — defaults to the previous departure day (next day if the time wraps)
   depart?: string;     // HH:mm — departure from this connection point
+  departDate?: string; // YYYY-MM-DD — defaults to the arrival day (next day if the time wraps)
   identifier?: string; // next flight #, next train # (not used for boat)
+  lat?: number;
+  lon?: number;
 }
 
 export interface TransportLeg {
@@ -275,7 +279,11 @@ export interface TransportLeg {
   arrivalDate?: string;       // YYYY-MM-DD
   arrivalTime?: string;       // HH:mm
   fromPoint?: string;         // city, airport code, station, or port
+  fromLat?: number;
+  fromLon?: number;
   toPoint?: string;
+  toLat?: number;
+  toLon?: number;
   carrier?: string;           // airline, train operator, or cruise line
   identifier?: string;        // flight #, train #, or ship name
   bookingRef?: string;
