@@ -94,7 +94,7 @@ export function getDayLocation(trip: Trip, date: string): string | undefined {
   return undefined;
 }
 
-function tripLabel(t: Trip): string {
+export function tripLabel(t: Trip): string {
   if (t.name) return t.name;
   if (t.stops && t.stops.length > 1) {
     return t.stops.map(s => s.label.split(',')[0].trim()).join(' → ');

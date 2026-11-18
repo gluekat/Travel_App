@@ -2,14 +2,14 @@ import { useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { HomeLocation, ScheduledActivity, Trip, TripDay, TripLodging } from '../../db/types';
-import { fmt12h, formatDay } from '../../lib/dates';
+import { fmt12h, formatDay, shortLocation } from '../../lib/dates';
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
 import { TimeInput } from '../../components/TimeInput';
 import { LocationInput } from '../../components/LocationInput';
 import { TripTabs } from './TripTabs';
-import { getDayLocation } from './TripDetail';
+import { getDayLocation, tripLabel } from './TripDetail';
 import { TransportSection } from './TransportSection';
-import { cruiseRanges, formatMinutes, isCruiseDay, isCruiseNight } from './transportPlan';
+import { cruiseRanges, formatMinutes, isCruiseDay, isCruiseNight, travelDaySummary } from './transportPlan';
 
 // ─── Activity form modal ──────────────────────────────────────────────────────
 
@@ -368,18 +368,30 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
     return lodgingItems.find((s) => s.checkInDate <= date && date < s.checkOutDate);
   }
 
+  const location = trip.stops && trip.stops.length > 1 ? trip.stops.map((s) => shortLocation(s.label)).join(' → ') : trip.placeLabel ?? trip.destination;
+
   return (
     <div className="space-y-6">
+      <div className="no-print">
+        <a href="#/trips" className="text-sm text-teal-700">← Trips</a>
+      </div>
+      <div aria-label="Travel summary">
+        <h1 className="text-xl font-semibold">
+          {tripLabel(trip)}
+          <span className="hidden print:inline"> — Itinerary</span>
+        </h1>
+        <p className="text-sm text-slate-600">
+          {location && <span className="text-teal-700">📍 {location}</span>}
+          {location && ' · '}
+          {formatDay(trip.startDate)} to {formatDay(trip.endDate)} · {days.length} day{days.length !== 1 ? 's' : ''}
+        </p>
+      </div>
       <div className="flex items-center justify-between gap-2 no-print">
         <TripTabs tripId={tripId} current="itinerary" />
         <Button onClick={() => window.print()} title="Print itinerary">
           <Icon name="printer" /> Print
         </Button>
       </div>
-      <div className="hidden print:block">
-        <h1 className="text-xl font-bold">{trip.name ?? trip.placeLabel ?? trip.destination} — Itinerary</h1>
-      </div>
-
       <TransportSection tripId={tripId} trip={trip} legs={transport} home={homeLocation} homeAirport={homeAirport} />
 
       {/* ── Lodging ──────────────────────────────────────────────────── */}
@@ -427,6 +439,7 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
             .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''));
           const isLastDay = day.date === lastDayDate;
           const nightStay = isLastDay ? undefined : lodgingForNight(day.date);
+          const travel = travelDaySummary(transport, day.date);
           const cruiseDay = isCruiseDay(cruises, day.date);
           const cruiseNight = isCruiseNight(cruises, day.date);
 
@@ -444,6 +457,17 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
                     : <span className="text-xs text-amber-600">🏨 No lodging</span>
                 )}
               </div>
+
+              {travel.length > 0 && (
+                <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-900" aria-label="Travel day summary">
+                  <p className="font-semibold">Travel day</p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {travel.map((line, k) => (
+                      <li key={k}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {dayActivities.length === 0 && (
                 <p className="text-sm text-slate-400">No activities scheduled.</p>
