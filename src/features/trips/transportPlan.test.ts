@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TransportLeg } from '../../db/types';
-import { cruiseRanges, directionSegments, isCruiseDay, isCruiseNight, driveEstimate, mirrorLeg, shiftTransportForTripDates, transportOverview } from './transportPlan';
+import { travelDaySummary, cruiseRanges, directionSegments, isCruiseDay, isCruiseNight, driveEstimate, mirrorLeg, shiftTransportForTripDates, transportOverview } from './transportPlan';
 
 const leg = (over: Partial<TransportLeg>): TransportLeg => ({ id: 1, tripId: 1, direction: 'outbound', mode: 'fly', departureDate: '2026-06-10', createdAt: 1, ...over });
 
@@ -83,5 +83,18 @@ describe('cruises', () => {
   it("uses a connection's own airline for its leg", () => {
     const segs = directionSegments([leg({ carrier: 'Delta', fromPoint: 'A', toPoint: 'C', connections: [{ point: 'B', carrier: 'KLM', identifier: 'KL1' }] })]);
     expect(segs.map((s) => s.carrier)).toEqual(['Delta', 'KLM']);
+  });
+});
+
+describe('travelDaySummary', () => {
+  it('summarises departures and arrivals on travel days only', () => {
+    const legs = [
+      leg({ fromPoint: 'JFK', toPoint: 'FCO', departureTime: '18:00', arrivalTime: '09:00', arrivalDate: '2026-06-11', carrier: 'ITA', identifier: 'AZ611' }),
+      leg({ id: 2, direction: 'return', departureDate: '2026-06-14', fromPoint: 'FCO', toPoint: 'JFK', departureTime: '10:00', arrivalTime: '14:00', arrivalDate: '2026-06-14' }),
+    ];
+    expect(travelDaySummary(legs, '2026-06-10')).toEqual([expect.stringMatching(/^✈️ Departs JFK 6:00 PM → arrives .*Jun 11.*FCO 9:00 AM · ITA AZ611$/)]);
+    expect(travelDaySummary(legs, '2026-06-11')).toEqual([expect.stringMatching(/^✈️ Arrives FCO 9:00 AM \(from JFK\)/)]);
+    expect(travelDaySummary(legs, '2026-06-12')).toEqual([]);
+    expect(travelDaySummary(legs, '2026-06-14')).toEqual(['✈️ FCO 10:00 AM → JFK 2:00 PM']);
   });
 });

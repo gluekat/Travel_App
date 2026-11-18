@@ -340,9 +340,9 @@ function LabeledBox({ label, children }: { label: string; children: ReactNode })
 
 function DateTimeBox({ label, date, time, dateRequired, onDate, onTime }: { label: string; date: string; time: string; dateRequired?: boolean; onDate: (v: string) => void; onTime: (v: string) => void }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className="grid gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto]">
       <LabeledBox label={`${label} date`}>
-        <input type="date" className={inputClass} value={date} onChange={(e) => onDate(e.target.value)} required={dateRequired} aria-label={`${label} date`} />
+        <input type="date" className={`${inputClass} min-w-0`} value={date} onChange={(e) => onDate(e.target.value)} required={dateRequired} aria-label={`${label} date`} />
       </LabeledBox>
       <LabeledBox label={`${label} time`}>
         <TimeInput value={time} onChange={onTime} />

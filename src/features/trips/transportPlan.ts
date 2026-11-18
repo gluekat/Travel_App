@@ -1,6 +1,6 @@
 /** Pure planning logic for the Itinerary's transportation: legs, layovers, drive estimates, date shifts. */
 import type { TransportConnection, TransportLeg, TransportMode } from '../../db/types';
-import { addDays, daysBetween } from '../../lib/dates';
+import { addDays, daysBetween, fmt12h, formatDay } from '../../lib/dates';
 
 export const LAYOVER_MODES: TransportMode[] = ['fly', 'train', 'boat'];
 
@@ -256,3 +256,24 @@ export const isCruiseDay = (ranges: { start: string; end: string }[], date: stri
 
 /** A night spent on board: no lodging is needed. */
 export const isCruiseNight = (ranges: { start: string; end: string }[], date: string) => ranges.some((r) => r.start <= date && date < r.end);
+
+// ─── Daily travel summary ────────────────────────────────────────────────────
+
+const MODE_EMOJI: Record<TransportMode, string> = { drive: '🚗', fly: '✈️', train: '🚂', boat: '🛳️' };
+
+/** One short line per leg that departs or arrives on `date` (empty when it isn't a travel day). */
+export function travelDaySummary(legs: TransportLeg[], date: string): string[] {
+  const segs = [...directionSegments(legs.filter((l) => l.direction === 'outbound')), ...directionSegments(legs.filter((l) => l.direction === 'return'))];
+  const at = (label: string, time?: string) => `${label || '?'}${time ? ` ${fmt12h(time)}` : ''}`;
+  return segs
+    .filter((s) => s.departDate === date || s.arriveDate === date)
+    .sort((a, b) => (a.departTime ?? '').localeCompare(b.departTime ?? ''))
+    .map((s) => {
+      const via = [s.carrier, s.identifier].filter(Boolean).join(' ');
+      const extra = via ? ` · ${via}` : '';
+      const icon = MODE_EMOJI[s.mode];
+      if (s.departDate === date && (s.arriveDate === date || !s.arriveDate)) return `${icon} ${at(s.from, s.departTime)} → ${at(s.to, s.arriveTime)}${extra}`;
+      if (s.departDate === date) return `${icon} Departs ${at(s.from, s.departTime)} → arrives ${formatDay(s.arriveDate!)}, ${at(s.to, s.arriveTime)}${extra}`;
+      return `${icon} Arrives ${at(s.to, s.arriveTime)} (from ${s.from || '?'})${extra}`;
+    });
+}
