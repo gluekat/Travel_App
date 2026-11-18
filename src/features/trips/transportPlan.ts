@@ -19,6 +19,8 @@ export interface Segment {
   identifier?: string;
   bookingRef?: string;
   notes?: string;
+  /** The booking's "dates need updating" flag (on its first leg only). */
+  needsAttention?: string;
   /** Driving distance, estimated from coordinates unless entered by hand. */
   distanceMiles?: number;
   /** Door-to-door time: driving estimate, or arrival minus departure when both are known. */
@@ -103,10 +105,11 @@ export function legSegments(leg: TransportLeg): Omit<Segment, 'n' | 'layoverMinu
       departTime,
       arriveDate,
       arriveTime,
-      carrier: leg.carrier,
+      carrier: k === 0 ? leg.carrier : conns[k - 1]?.carrier || leg.carrier,
       identifier: k === 0 ? leg.identifier : conns[k - 1]?.identifier,
       bookingRef: leg.bookingRef,
       notes: k === 0 ? leg.notes : undefined,
+      needsAttention: k === 0 ? leg.needsAttention : undefined,
     };
     const single = points.length === 2;
     if (leg.mode === 'drive') {
@@ -235,3 +238,21 @@ export function mirrorLeg(leg: Omit<TransportLeg, 'id'>, returnDate: string): Om
     createdAt: Date.now(),
   };
 }
+
+// ─── Cruises ─────────────────────────────────────────────────────────────────
+
+/** Dates a boat booking covers, from embarkation to disembarkation. */
+export function cruiseRanges(legs: TransportLeg[]): { start: string; end: string }[] {
+  return legs
+    .filter((l) => l.mode === 'boat')
+    .map((l) => {
+      const dates = [l.departureDate, l.arrivalDate, ...(l.connections ?? []).flatMap((c) => [c.arriveDate, c.departDate])].filter((d): d is string => !!d).sort();
+      return { start: dates[0], end: dates[dates.length - 1] };
+    });
+}
+
+/** A day on board a cruise, including embarkation and disembarkation days. */
+export const isCruiseDay = (ranges: { start: string; end: string }[], date: string) => ranges.some((r) => r.start <= date && date <= r.end);
+
+/** A night spent on board: no lodging is needed. */
+export const isCruiseNight = (ranges: { start: string; end: string }[], date: string) => ranges.some((r) => r.start <= date && date < r.end);

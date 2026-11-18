@@ -16,6 +16,7 @@ import { fillEmptyDays } from '../outfits/outfitService';
 import { DayCard } from './DayCard';
 import { computeOverWorn, countWearDays, weatherMismatches } from './wearPlan';
 import { ForecastWarning } from './ForecastWarning';
+import { applyAdjustments, flagAdjustments, planTripDateAdjustments, type DateAdjustment } from './tripAdjustments';
 import { TripTabs } from './TripTabs';
 import { PlaceSearch } from './PlaceSearch';
 import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace } from './tripService';
@@ -101,6 +102,56 @@ function tripLabel(t: Trip): string {
   return t.placeLabel ?? t.destination;
 }
 
+/** After a trip's dates change: confirm which lodging and travel dates should move too. Declined ones stay flagged. */
+function ConfirmDateAdjustments({ plan, onClose }: { plan: DateAdjustment[]; onClose: () => void }) {
+  const [accepted, setAccepted] = useState(() => new Set(plan.map((a) => a.key)));
+  const toggle = (key: string) => setAccepted((s) => { const n = new Set(s); if (!n.delete(key)) n.add(key); return n; });
+  const groups = [
+    { label: 'Transportation', items: plan.filter((a) => a.kind === 'transport') },
+    { label: 'Lodging', items: plan.filter((a) => a.kind === 'lodging') },
+  ].filter((g) => g.items.length);
+  return (
+    <Modal title="Update lodging & transportation?" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          The trip dates changed. Move these bookings to match? Any you leave unchecked keep their current dates and are flagged <span className="font-medium text-amber-700">needs updating</span> on the Itinerary page.
+        </p>
+        {groups.map((g) => (
+          <div key={g.label}>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{g.label}</p>
+            <ul className="space-y-1.5">
+              {g.items.map((a) => (
+                <li key={a.key}>
+                  <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-2 text-sm">
+                    <input type="checkbox" className="mt-0.5 h-4 w-4 accent-teal-700" checked={accepted.has(a.key)} onChange={() => toggle(a.key)} />
+                    <span>
+                      <span className="block font-medium">{a.title}</span>
+                      <span className="block text-xs text-slate-500">{a.detail}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Keep current dates</Button>
+          <Button
+            variant="primary"
+            disabled={accepted.size === 0}
+            onClick={async () => {
+              await applyAdjustments(plan, accepted);
+              onClose();
+            }}
+          >
+            Update {accepted.size === plan.length ? 'all' : `${accepted.size} selected`}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClose: () => void; onRefreshWeather: () => void }) {
   const [name, setName] = useState(trip.name ?? '');
   const [query, setQuery] = useState(trip.destination);
@@ -108,6 +159,7 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
   const [start, setStart] = useState(trip.startDate);
   const [end, setEnd] = useState(trip.endDate);
   const [error, setError] = useState<string>();
+  const [pending, setPending] = useState<DateAdjustment[]>();
 
   async function save() {
     try {
@@ -118,7 +170,17 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
       const datesChanged = start !== trip.startDate || end !== trip.endDate;
       if (place) await setTripPlace(trip.id!, place);
       if (query.trim() !== trip.destination && !place) await db.trips.update(trip.id!, { destination: query.trim() });
-      if (datesChanged) await setTripDates(trip, start, end);
+      if (datesChanged) {
+        // Lodging and travel dates are proposed, not silently changed: the user confirms below.
+        const plan = await planTripDateAdjustments(trip.id!, trip.startDate, trip.endDate, start, end);
+        await setTripDates(trip, start, end);
+        if (plan.length) {
+          await flagAdjustments(plan, trip.startDate, trip.endDate);
+          onRefreshWeather();
+          setPending(plan);
+          return;
+        }
+      }
       onClose();
       if (locationChanged || datesChanged) onRefreshWeather();
     } catch (e) {
@@ -127,6 +189,7 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
   }
 
   const days = dateRange(start, end).length;
+  if (pending) return <ConfirmDateAdjustments plan={pending} onClose={onClose} />;
   return (
     <Modal title="Edit trip" onClose={onClose}>
       <div className="space-y-4">

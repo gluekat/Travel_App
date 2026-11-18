@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TransportLeg } from '../../db/types';
-import { directionSegments, driveEstimate, mirrorLeg, shiftTransportForTripDates, transportOverview } from './transportPlan';
+import { cruiseRanges, directionSegments, isCruiseDay, isCruiseNight, driveEstimate, mirrorLeg, shiftTransportForTripDates, transportOverview } from './transportPlan';
 
 const leg = (over: Partial<TransportLeg>): TransportLeg => ({ id: 1, tripId: 1, direction: 'outbound', mode: 'fly', departureDate: '2026-06-10', createdAt: 1, ...over });
 
@@ -66,5 +66,22 @@ describe('trip date changes and round trips', () => {
     expect(m).toMatchObject({ direction: 'return', fromPoint: 'FCO', toPoint: 'JFK', departureDate: '2026-06-14', carrier: 'ITA' });
     expect(m.identifier).toBeUndefined();
     expect(m.connections).toEqual([{ point: 'LHR', lat: undefined, lon: undefined }]);
+  });
+});
+
+describe('cruises', () => {
+  it('covers embarkation through disembarkation; nights on board need no lodging', () => {
+    const ranges = cruiseRanges([leg({ mode: 'boat', departureDate: '2026-06-10', arrivalDate: '2026-06-14' }), leg({ id: 2, departureDate: '2026-06-01' })]);
+    expect(ranges).toEqual([{ start: '2026-06-10', end: '2026-06-14' }]);
+    expect(isCruiseDay(ranges, '2026-06-10')).toBe(true);
+    expect(isCruiseDay(ranges, '2026-06-14')).toBe(true);
+    expect(isCruiseNight(ranges, '2026-06-13')).toBe(true);
+    expect(isCruiseNight(ranges, '2026-06-14')).toBe(false);
+    expect(isCruiseDay(ranges, '2026-06-09')).toBe(false);
+  });
+
+  it("uses a connection's own airline for its leg", () => {
+    const segs = directionSegments([leg({ carrier: 'Delta', fromPoint: 'A', toPoint: 'C', connections: [{ point: 'B', carrier: 'KLM', identifier: 'KL1' }] })]);
+    expect(segs.map((s) => s.carrier)).toEqual(['Delta', 'KLM']);
   });
 });
