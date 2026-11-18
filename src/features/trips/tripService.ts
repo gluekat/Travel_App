@@ -3,7 +3,6 @@ import { emptyOutfit } from '../../db/migrate';
 import type { Activity, Trip, TripStop } from '../../db/types';
 import { addDays, dateRange, daysBetween, todayISO } from '../../lib/dates';
 import type { Place } from '../../weather/openMeteo';
-import { shiftTransportForTripDates } from './transportPlan';
 import { syncPacking } from '../outfits/outfitService';
 import { defaultPackingRows, ensureGeneralLibrary } from '../packing/generalItemsService';
 
@@ -59,16 +58,7 @@ export async function setTripDates(trip: Trip, startDate: string, endDate: strin
   if (!dates.length) throw new Error('End date must be on or after the start date.');
   if (dates.length > MAX_TRIP_DAYS) throw new Error(`Trips can be at most ${MAX_TRIP_DAYS} days.`);
   const tripId = trip.id!;
-  await db.transaction('rw', db.trips, db.tripDays, db.outfits, db.tripLodging, db.tripTransport, async () => {
-    // Travel legs that reached the old first day / left on the old last day follow the new dates.
-    const legs = await db.tripTransport.where('tripId').equals(tripId).toArray();
-    for (const { id, patch } of shiftTransportForTripDates(legs, trip.startDate, startDate, trip.endDate, endDate)) await db.tripTransport.update(id, patch);
-    // Stays that ran to the old first/last day follow the new dates; later check-outs are trimmed to the new end.
-    await db.tripLodging.where('tripId').equals(tripId).modify((stay) => {
-      if (stay.checkInDate === trip.startDate) stay.checkInDate = startDate;
-      if (stay.checkOutDate === trip.endDate || stay.checkOutDate > endDate) stay.checkOutDate = endDate;
-      if (stay.checkInDate > stay.checkOutDate) stay.checkInDate = stay.checkOutDate;
-    });
+  await db.transaction('rw', db.trips, db.tripDays, db.outfits, async () => {
     const existing = await db.tripDays.where('tripId').equals(tripId).toArray();
     const drop = existing.filter((d) => !dates.includes(d.date));
     for (const d of drop) await db.outfits.where('tripDayId').equals(d.id!).delete();

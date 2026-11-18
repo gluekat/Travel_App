@@ -9,7 +9,7 @@ import { LocationInput } from '../../components/LocationInput';
 import { TripTabs } from './TripTabs';
 import { getDayLocation } from './TripDetail';
 import { TransportSection } from './TransportSection';
-import { formatMinutes } from './transportPlan';
+import { cruiseRanges, formatMinutes, isCruiseDay, isCruiseNight } from './transportPlan';
 
 // ─── Activity form modal ──────────────────────────────────────────────────────
 
@@ -143,7 +143,15 @@ function ActivityFormModal({ tripId, trip, days, existing, defaultDayId, onClose
 
 function LodgingCard({ stay, tripCity, onEdit, onDelete }: { stay: TripLodging; tripCity?: string; onEdit: () => void; onDelete: () => void }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
+    <div className={`rounded-lg border bg-white p-3 ${stay.needsAttention ? 'border-amber-300' : 'border-slate-200'}`}>
+      {stay.needsAttention && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800" role="alert">
+          <span>⚠️ Needs updating — {stay.needsAttention}</span>
+          <button type="button" className="no-print underline" onClick={() => void db.tripLodging.update(stay.id!, { needsAttention: undefined })}>
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
@@ -214,6 +222,7 @@ function LodgingFormModal({ tripId, trip, existing, onClose }: {
         confirmationNumber: confirmationNumber.trim() || undefined,
         phone: phone.trim() || undefined,
         notes: notes.trim() || undefined,
+        needsAttention: undefined,
         createdAt: existing?.createdAt ?? Date.now(),
       };
       if (existing?.id) {
@@ -351,7 +360,8 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
   const lodgingItems = lodging ?? [];
   // The stay that ends latest: offer to extend it when nights at the end of the trip have no lodging.
   const lastStay = lodgingItems.reduce<TripLodging | undefined>((m, s) => (!m || s.checkOutDate > m.checkOutDate ? s : m), undefined);
-  const uncoveredNights = days.filter((d) => d.date !== lastDayDate && !lodgingItems.some((s) => s.checkInDate <= d.date && d.date < s.checkOutDate));
+  const cruises = cruiseRanges(transport);
+  const uncoveredNights = days.filter((d) => d.date !== lastDayDate && !isCruiseNight(cruises, d.date) && !lodgingItems.some((s) => s.checkInDate <= d.date && d.date < s.checkOutDate));
   const canExtendLastStay = !!lastStay && !!lastDayDate && lastStay.checkOutDate < lastDayDate && uncoveredNights.some((d) => d.date >= lastStay.checkOutDate);
 
   function lodgingForNight(date: string): TripLodging | undefined {
@@ -417,6 +427,8 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
             .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''));
           const isLastDay = day.date === lastDayDate;
           const nightStay = isLastDay ? undefined : lodgingForNight(day.date);
+          const cruiseDay = isCruiseDay(cruises, day.date);
+          const cruiseNight = isCruiseNight(cruises, day.date);
 
           return (
             <div key={day.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
@@ -425,7 +437,8 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
                   Day {i + 1} · {formatDay(day.date)}
                   {(() => { const loc = getDayLocation(trip, day.date); return loc ? <span className="font-normal text-teal-700"> · {loc}</span> : null; })()}
                 </h3>
-                {!isLastDay && (
+                {cruiseDay && <span className="text-xs font-medium text-sky-700">🛳️ Cruise day</span>}
+                {!isLastDay && !cruiseNight && (
                   nightStay
                     ? <span className="text-xs text-slate-500">🏨 {nightStay.name}</span>
                     : <span className="text-xs text-amber-600">🏨 No lodging</span>

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
 import { db } from '../../db/schema';
 import type { HomeLocation, TransportConnection, TransportLeg, TransportMode, Trip } from '../../db/types';
 import { fmt12h, formatDay, shortLocation } from '../../lib/dates';
@@ -6,7 +6,7 @@ import { airportByCode, airportLabel, nearestAirport } from '../../lib/airports'
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
 import { TimeInput } from '../../components/TimeInput';
 import { LocationInput } from '../../components/LocationInput';
-import { directionSegments, directionTotalMinutes, driveEstimate, formatMinutes, mirrorLeg, transportOverview, type Segment } from './transportPlan';
+import { cruiseRanges, directionSegments, directionTotalMinutes, driveEstimate, formatMinutes, mirrorLeg, transportOverview, type Segment } from './transportPlan';
 
 const MODE_ICON: Record<TransportMode, string> = { drive: '🚗', fly: '✈️', train: '🚂', boat: '🛳️' };
 const MODE_LABEL: Record<TransportMode, string> = { drive: 'Drive', fly: 'Flight', train: 'Train', boat: 'Cruise / Boat' };
@@ -24,7 +24,7 @@ function Place({ label, time, date, refDate }: { label: string; time?: string; d
   );
 }
 
-function SegmentRow({ seg, onEdit, onDelete, first }: { seg: Segment; onEdit: () => void; onDelete: () => void; first: boolean }) {
+function SegmentRow({ seg, onEdit, onDelete, onDismiss, first }: { seg: Segment; onEdit: () => void; onDelete: () => void; onDismiss: () => void; first: boolean }) {
   const detail = [seg.carrier, seg.identifier, seg.bookingRef ? `Ref ${seg.bookingRef}` : undefined].filter(Boolean).join(' · ');
   return (
     <li>
@@ -33,7 +33,13 @@ function SegmentRow({ seg, onEdit, onDelete, first }: { seg: Segment; onEdit: ()
           ⏱ Layover at {shortLocation(seg.from) || seg.from}: {formatMinutes(seg.layoverMinutes)}
         </div>
       )}
-      <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className={`rounded-lg border bg-white p-3 ${seg.needsAttention ? 'border-amber-300' : 'border-slate-200'}`}>
+        {seg.needsAttention && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800" role="alert">
+            <span>⚠️ Needs updating — {seg.needsAttention}</span>
+            <button type="button" onClick={onDismiss} className="no-print underline">Dismiss</button>
+          </div>
+        )}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -68,8 +74,37 @@ function SegmentRow({ seg, onEdit, onDelete, first }: { seg: Segment; onEdit: ()
   );
 }
 
+/** One direction's (or the cruise's) legs in order, with a labelled divider wherever the type of travel changes. */
+function SegmentList({ segs, byId, onEdit, onDelete }: { segs: Segment[]; byId: Map<number, TransportLeg>; onEdit: (leg: TransportLeg) => void; onDelete: (leg: TransportLeg) => void }) {
+  const seen = new Set<number>();
+  return (
+    <ul className="space-y-1.5">
+      {segs.map((seg, i) => {
+        const leg = byId.get(seg.legId!)!;
+        const first = !seen.has(seg.legId!);
+        seen.add(seg.legId!);
+        const prev = segs[i - 1];
+        return (
+          <Fragment key={`${seg.legId}-${i}`}>
+            {prev && prev.mode !== seg.mode && (
+              <li className="flex items-center gap-3 py-3 text-xs font-medium text-slate-500" role="separator">
+                <span className="h-px flex-1 bg-slate-300" />
+                <span>
+                  {MODE_ICON[prev.mode]} {MODE_LABEL[prev.mode]} → {MODE_ICON[seg.mode]} {MODE_LABEL[seg.mode]}
+                </span>
+                <span className="h-px flex-1 bg-slate-300" />
+              </li>
+            )}
+            <SegmentRow seg={seg} first={first} onEdit={() => onEdit(leg)} onDelete={() => onDelete(leg)} onDismiss={() => void db.tripTransport.update(leg.id!, { needsAttention: undefined })} />
+          </Fragment>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function TransportSection({ tripId, trip, legs, home, homeAirport }: { tripId: number; trip: Trip; legs: TransportLeg[]; home?: HomeLocation | null; homeAirport?: string | null }) {
-  const [form, setForm] = useState<{ leg?: TransportLeg; direction: 'outbound' | 'return' | 'roundtrip' } | null>(null);
+  const [form, setForm] = useState<{ leg?: TransportLeg; direction: 'outbound' | 'return' | 'roundtrip'; mode?: TransportMode } | null>(null);
   const overview = transportOverview(legs);
   const byId = new Map(legs.map((l) => [l.id!, l]));
 
@@ -120,9 +155,9 @@ export function TransportSection({ tripId, trip, legs, home, homeAirport }: { tr
       )}
 
       {(['outbound', 'return'] as const).map((dir) => {
-        const segs = directionSegments(legs.filter((l) => l.direction === dir));
+        const dirLegs = legs.filter((l) => l.direction === dir);
+        const segs = directionSegments(dirLegs.filter((l) => l.mode !== 'boat'));
         const total = directionTotalMinutes(segs);
-        const seenLegs = new Set<number>();
         return (
           <div key={dir} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -135,15 +170,9 @@ export function TransportSection({ tripId, trip, legs, home, homeAirport }: { tr
                 </p>
               )}
             </div>
-            {segs.length === 0 && <p className="text-sm text-slate-400">No transport added yet.</p>}
-            <ul className="space-y-1.5">
-              {segs.map((seg, i) => {
-                const leg = byId.get(seg.legId!)!;
-                const first = !seenLegs.has(seg.legId!);
-                seenLegs.add(seg.legId!);
-                return <SegmentRow key={`${seg.legId}-${i}`} seg={seg} first={first} onEdit={() => setForm({ leg, direction: dir })} onDelete={() => void remove(leg)} />;
-              })}
-            </ul>
+            {dirLegs.length === 0 && <p className="text-sm text-slate-400">No transport added yet.</p>}
+            {dirLegs.length > 0 && segs.length === 0 && <p className="text-sm text-slate-400">Only cruise travel so far — see the Cruise section below.</p>}
+            <SegmentList segs={segs} byId={byId} onEdit={(leg) => setForm({ leg, direction: dir })} onDelete={(leg) => void remove(leg)} />
             <div className="no-print">
               <Button variant="ghost" onClick={() => setForm({ direction: dir })}>
                 <Icon name="plus" /> Add {dir} transport
@@ -153,7 +182,36 @@ export function TransportSection({ tripId, trip, legs, home, homeAirport }: { tr
         );
       })}
 
-      {form && <TransportFormModal tripId={tripId} trip={trip} home={home ?? undefined} homeAirport={homeAirport ?? undefined} existing={form.leg} defaultDirection={form.direction} onClose={() => setForm(null)} />}
+      {/* A cruise is one trip: embarkation, ports and disembarkation together, whichever direction each leg was added under. */}
+      {(() => {
+        const cruiseLegs = legs.filter((l) => l.mode === 'boat');
+        const segs = directionSegments(cruiseLegs);
+        const ranges = cruiseRanges(cruiseLegs);
+        const start = ranges.map((r) => r.start).sort()[0];
+        const end = ranges.map((r) => r.end).sort().pop();
+        return (
+          <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/60 p-4" aria-label="Cruise">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <h3 className="text-sm font-semibold text-sky-900">🛳️ Cruise</h3>
+              {segs.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  {segs[0].from} → {segs[segs.length - 1].to}
+                  {start && end && ` · ${formatDay(start)}${end !== start ? ` – ${formatDay(end)}` : ''}`}
+                </p>
+              )}
+            </div>
+            {segs.length === 0 && <p className="text-sm text-slate-400">No cruise added. Lodging isn't needed on cruise nights.</p>}
+            <SegmentList segs={segs} byId={byId} onEdit={(leg) => setForm({ leg, direction: leg.direction })} onDelete={(leg) => void remove(leg)} />
+            <div className="no-print">
+              <Button variant="ghost" onClick={() => setForm({ direction: 'outbound', mode: 'boat' })}>
+                <Icon name="plus" /> Add cruise
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {form && <TransportFormModal tripId={tripId} trip={trip} home={home ?? undefined} homeAirport={homeAirport ?? undefined} existing={form.leg} defaultDirection={form.direction} defaultMode={form.mode} onClose={() => setForm(null)} />}
     </section>
   );
 }
@@ -161,7 +219,7 @@ export function TransportSection({ tripId, trip, legs, home, homeAirport }: { tr
 // ─── Form ────────────────────────────────────────────────────────────────────
 
 type Point = { label: string; lat?: number; lon?: number };
-type StopDraft = { point: Point; arrive: string; arriveDate: string; depart: string; departDate: string; identifier: string };
+type StopDraft = { point: Point; arrive: string; arriveDate: string; depart: string; departDate: string; carrier: string; identifier: string };
 type Direction = 'outbound' | 'return' | 'roundtrip';
 
 interface Draft {
@@ -184,7 +242,7 @@ interface Draft {
   notes: string;
 }
 
-const emptyStop = (): StopDraft => ({ point: { label: '' }, arrive: '', arriveDate: '', depart: '', departDate: '', identifier: '' });
+const emptyStop = (): StopDraft => ({ point: { label: '' }, arrive: '', arriveDate: '', depart: '', departDate: '', carrier: '', identifier: '' });
 
 function homePoint(mode: TransportMode, home?: HomeLocation, homeAirport?: string): Point {
   if (mode === 'fly') {
@@ -211,8 +269,7 @@ function defaultEnds(direction: Direction, mode: TransportMode, trip: Trip, home
   return direction === 'return' ? { from: tripPoint(mode, trip, 'last'), to: h } : { from: h, to: tripPoint(mode, trip, 'first') };
 }
 
-function emptyDraft(direction: Direction, trip: Trip, home?: HomeLocation, homeAirport?: string): Draft {
-  const mode: TransportMode = 'fly';
+function emptyDraft(direction: Direction, trip: Trip, home?: HomeLocation, homeAirport?: string, mode: TransportMode = 'fly'): Draft {
   const date = direction === 'return' ? trip.endDate : trip.startDate;
   return {
     direction, mode, departureDate: date, departureTime: '', arrivalDate: date, arrivalTime: '',
@@ -235,7 +292,7 @@ function legToDraft(leg: TransportLeg): Draft {
     distEstimated: false,
     stops: (leg.connections ?? []).map((c) => ({
       point: { label: c.point, lat: c.lat, lon: c.lon },
-      arrive: c.arrive ?? '', arriveDate: c.arriveDate ?? '', depart: c.depart ?? '', departDate: c.departDate ?? '', identifier: c.identifier ?? '',
+      arrive: c.arrive ?? '', arriveDate: c.arriveDate ?? '', depart: c.depart ?? '', departDate: c.departDate ?? '', carrier: c.carrier ?? '', identifier: c.identifier ?? '',
     })),
     notes: leg.notes ?? '',
   };
@@ -248,6 +305,7 @@ function draftToLeg(d: Draft, tripId: number, existing?: TransportLeg): Omit<Tra
       point: s.point.label.trim(), lat: s.point.lat, lon: s.point.lon,
       arrive: s.arrive || undefined, arriveDate: s.arriveDate || undefined,
       depart: s.depart || undefined, departDate: s.departDate || undefined,
+      carrier: s.carrier.trim() || undefined,
       identifier: s.identifier.trim() || undefined,
     }));
   // With stops each driving leg is estimated automatically; a single drive keeps the editable distance / time.
@@ -266,20 +324,65 @@ function draftToLeg(d: Draft, tripId: number, existing?: TransportLeg): Omit<Tra
     travelTimeMinutes: travelMins || undefined,
     connections: stops.length ? stops : undefined,
     notes: d.notes.trim() || undefined,
+    needsAttention: undefined,
     createdAt: existing?.createdAt ?? Date.now(),
   };
 }
 
-function TransportFormModal({ tripId, trip, home, homeAirport, existing, defaultDirection, onClose }: {
+function LabeledBox({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function DateTimeBox({ label, date, time, dateRequired, onDate, onTime }: { label: string; date: string; time: string; dateRequired?: boolean; onDate: (v: string) => void; onTime: (v: string) => void }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <LabeledBox label={`${label} date`}>
+        <input type="date" className={inputClass} value={date} onChange={(e) => onDate(e.target.value)} required={dateRequired} aria-label={`${label} date`} />
+      </LabeledBox>
+      <LabeledBox label={`${label} time`}>
+        <TimeInput value={time} onChange={onTime} />
+      </LabeledBox>
+    </div>
+  );
+}
+
+const CARRIER_LABELS: Record<TransportMode, [string, string]> = {
+  fly: ['Airline', 'Flight #'],
+  train: ['Train operator', 'Train # / name'],
+  boat: ['Cruise line', 'Ship name'],
+  drive: ['', ''],
+};
+
+function CarrierBox({ mode, carrier, identifier, onCarrier, onIdentifier }: { mode: TransportMode; carrier: string; identifier: string; onCarrier: (v: string) => void; onIdentifier: (v: string) => void }) {
+  const [carrierLabel, idLabel] = CARRIER_LABELS[mode];
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <LabeledBox label={carrierLabel}>
+        <input type="text" className={inputClass} value={carrier} onChange={(e) => onCarrier(e.target.value)} aria-label={carrierLabel} />
+      </LabeledBox>
+      <LabeledBox label={idLabel}>
+        <input type="text" className={inputClass} value={identifier} onChange={(e) => onIdentifier(e.target.value)} aria-label={idLabel} />
+      </LabeledBox>
+    </div>
+  );
+}
+
+function TransportFormModal({ tripId, trip, home, homeAirport, existing, defaultDirection, defaultMode, onClose }: {
   tripId: number;
   trip: Trip;
   home?: HomeLocation;
   homeAirport?: string;
   existing?: TransportLeg;
   defaultDirection: Direction;
+  defaultMode?: TransportMode;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<Draft>(existing ? legToDraft(existing) : emptyDraft(defaultDirection, trip, home, homeAirport));
+  const [draft, setDraft] = useState<Draft>(existing ? legToDraft(existing) : emptyDraft(defaultDirection, trip, home, homeAirport, defaultMode));
   const [touched, setTouched] = useState({ from: !!existing, to: !!existing });
   const [error, setError] = useState<string>();
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
@@ -287,6 +390,7 @@ function TransportFormModal({ tripId, trip, home, homeAirport, existing, default
 
   const m = draft.mode;
   const locationMode = m === 'fly' ? 'airport' : 'place';
+  const hasCarrier = m !== 'drive';
   const pointNoun = m === 'fly' ? 'airport' : m === 'train' ? 'station' : m === 'boat' ? 'port' : 'location';
 
   function changeMode(mode: TransportMode) {
@@ -296,7 +400,7 @@ function TransportFormModal({ tripId, trip, home, homeAirport, existing, default
       // Untouched endpoints re-suggest for the new mode (an airport for flights, an address otherwise).
       ...(touched.from ? {} : { from: ends.from }),
       ...(touched.to ? {} : { to: ends.to }),
-      stops: draft.stops.map((s) => ({ ...s, identifier: mode === 'drive' || mode === 'boat' ? '' : s.identifier })),
+      stops: draft.stops.map((s) => ({ ...s, carrier: mode === 'fly' || mode === 'train' ? s.carrier : '', identifier: mode === 'fly' || mode === 'train' ? s.identifier : '' })),
     });
   }
 
@@ -375,82 +479,60 @@ function TransportFormModal({ tripId, trip, home, homeAirport, existing, default
           </select>
         </Field>
 
-        <div className="rounded-lg border border-slate-200 p-3 space-y-2">
-          <p className="text-sm font-medium text-slate-700">Departure</p>
-          <LocationInput value={draft.from.label} mode={locationMode} onChange={(l, la, lo) => pickEnd('from', l, la, lo)}
-            placeholder={m === 'fly' ? 'Search airport: code, name or city' : `Departure ${pointNoun}`} />
-          <div className="flex flex-wrap items-center gap-2">
-            <input type="date" className={`${inputClass} min-w-[9rem] flex-1`} value={draft.departureDate} onChange={(e) => set({ departureDate: e.target.value })} required aria-label="Departure date" />
-            <TimeInput value={draft.departureTime} onChange={(v) => set({ departureTime: v })} />
-          </div>
+        <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+          <p className="text-sm font-semibold text-slate-700">Departure</p>
+          <LabeledBox label={`Departure ${pointNoun}`}>
+            <LocationInput value={draft.from.label} mode={locationMode} ariaLabel={`Departure ${pointNoun}`} onChange={(l, la, lo) => pickEnd('from', l, la, lo)}
+              placeholder={m === 'fly' ? 'Search by code, name or city' : `Search ${pointNoun}`} />
+          </LabeledBox>
+          <DateTimeBox label="Depart" date={draft.departureDate} time={draft.departureTime} dateRequired onDate={(v) => set({ departureDate: v })} onTime={(v) => set({ departureTime: v })} />
+          {hasCarrier && (
+            <CarrierBox mode={m} carrier={draft.carrier} identifier={draft.identifier} onCarrier={(v) => set({ carrier: v })} onIdentifier={(v) => set({ identifier: v })} />
+          )}
         </div>
 
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700">{m === 'fly' ? 'Layovers / connections' : m === 'drive' ? 'Stops along the way' : m === 'train' ? 'Connections / stops' : 'Port stops'}</span>
+            <span className="text-sm font-semibold text-slate-700">{m === 'fly' ? 'Layovers / connections' : m === 'drive' ? 'Stops along the way' : m === 'train' ? 'Connections / stops' : 'Port stops'}</span>
             <button type="button" onClick={() => set({ stops: [...draft.stops, emptyStop()] })} className="text-xs text-teal-700 hover:text-teal-900">+ Add stop</button>
           </div>
           {draft.stops.map((stop, i) => (
-            <div key={i} className="mb-2 space-y-2 rounded-lg bg-slate-50 p-2">
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <LocationInput value={stop.point.label} mode={locationMode} onChange={(l, la, lo) => setStop(i, { point: { label: l, lat: la, lon: lo } })} placeholder={`Stop ${i + 1}: ${pointNoun}`} />
-                </div>
+            <div key={i} className="mb-2 space-y-2 rounded-lg border border-slate-200 p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-slate-700">{m === 'fly' ? 'Connection' : 'Stop'} {i + 1}</p>
                 <button type="button" onClick={() => set({ stops: draft.stops.filter((_, j) => j !== i) })} className="text-xs text-red-600 hover:text-red-800">Remove</button>
               </div>
+              <LabeledBox label={`${m === 'fly' ? 'Connection' : 'Stop'} ${i + 1} ${pointNoun}`}>
+                <LocationInput value={stop.point.label} mode={locationMode} ariaLabel={`Stop ${i + 1} ${pointNoun}`} onChange={(l, la, lo) => setStop(i, { point: { label: l, lat: la, lon: lo } })}
+                  placeholder={m === 'fly' ? 'Search by code, name or city' : `Search ${pointNoun}`} />
+              </LabeledBox>
               {m !== 'drive' && (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <span className="text-xs text-slate-500">Arrive</span>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <input type="date" className={`${inputClass} min-w-[8rem] flex-1`} value={stop.arriveDate} onChange={(e) => setStop(i, { arriveDate: e.target.value })} aria-label={`Stop ${i + 1} arrival date`} />
-                      <TimeInput value={stop.arrive} onChange={(v) => setStop(i, { arrive: v })} />
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500">Depart</span>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <input type="date" className={`${inputClass} min-w-[8rem] flex-1`} value={stop.departDate} onChange={(e) => setStop(i, { departDate: e.target.value })} aria-label={`Stop ${i + 1} departure date`} />
-                      <TimeInput value={stop.depart} onChange={(v) => setStop(i, { depart: v })} />
-                    </div>
-                  </div>
-                  {m !== 'boat' && (
-                    <div>
-                      <span className="text-xs text-slate-500">{m === 'fly' ? 'Next flight #' : 'Next train #'}</span>
-                      <input type="text" className={inputClass} value={stop.identifier} onChange={(e) => setStop(i, { identifier: e.target.value })} />
-                    </div>
+                <>
+                  <DateTimeBox label="Arrive" date={stop.arriveDate} time={stop.arrive} onDate={(v) => setStop(i, { arriveDate: v })} onTime={(v) => setStop(i, { arrive: v })} />
+                  <DateTimeBox label="Depart" date={stop.departDate} time={stop.depart} onDate={(v) => setStop(i, { departDate: v })} onTime={(v) => setStop(i, { depart: v })} />
+                  {(m === 'fly' || m === 'train') && (
+                    <CarrierBox mode={m} carrier={stop.carrier} identifier={stop.identifier} onCarrier={(v) => setStop(i, { carrier: v })} onIdentifier={(v) => setStop(i, { identifier: v })} />
                   )}
-                </div>
+                </>
               )}
             </div>
           ))}
           {m !== 'drive' && draft.stops.length > 0 && <p className="text-xs text-slate-400">Layover times are calculated from the arrival and departure times. Dates default to the same day (or the next if the time wraps past midnight).</p>}
         </div>
 
-        <div className="rounded-lg border border-slate-200 p-3 space-y-2">
-          <p className="text-sm font-medium text-slate-700">Final arrival</p>
-          <LocationInput value={draft.to.label} mode={locationMode} onChange={(l, la, lo) => pickEnd('to', l, la, lo)}
-            placeholder={m === 'fly' ? 'Search airport: code, name or city' : `Arrival ${pointNoun}`} />
-          <div className="flex flex-wrap items-center gap-2">
-            <input type="date" className={`${inputClass} min-w-[9rem] flex-1`} value={draft.arrivalDate} onChange={(e) => set({ arrivalDate: e.target.value })} aria-label="Arrival date" />
-            <TimeInput value={draft.arrivalTime} onChange={(v) => set({ arrivalTime: v })} />
-          </div>
+        <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+          <p className="text-sm font-semibold text-slate-700">Final arrival</p>
+          <LabeledBox label={`Arrival ${pointNoun}`}>
+            <LocationInput value={draft.to.label} mode={locationMode} ariaLabel={`Arrival ${pointNoun}`} onChange={(l, la, lo) => pickEnd('to', l, la, lo)}
+              placeholder={m === 'fly' ? 'Search by code, name or city' : `Search ${pointNoun}`} />
+          </LabeledBox>
+          <DateTimeBox label="Arrive" date={draft.arrivalDate} time={draft.arrivalTime} onDate={(v) => set({ arrivalDate: v })} onTime={(v) => set({ arrivalTime: v })} />
         </div>
 
         {m !== 'drive' && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={m === 'fly' ? 'Airline' : m === 'train' ? 'Train operator' : 'Cruise line'}>
-                <input type="text" className={inputClass} value={draft.carrier} onChange={(e) => set({ carrier: e.target.value })} />
-              </Field>
-              <Field label={m === 'fly' ? 'Flight #' : m === 'train' ? 'Train # / name' : 'Ship name'}>
-                <input type="text" className={inputClass} value={draft.identifier} onChange={(e) => set({ identifier: e.target.value })} />
-              </Field>
-            </div>
-            <Field label={m === 'fly' ? 'Booking reference' : 'Ticket reference'}>
-              <input type="text" className={inputClass} value={draft.bookingRef} onChange={(e) => set({ bookingRef: e.target.value })} />
-            </Field>
-          </>
+          <Field label={m === 'fly' ? 'Booking reference' : 'Ticket reference'}>
+            <input type="text" className={inputClass} value={draft.bookingRef} onChange={(e) => set({ bookingRef: e.target.value })} />
+          </Field>
         )}
 
         {m === 'drive' && draft.stops.length === 0 && (

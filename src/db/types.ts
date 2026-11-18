@@ -264,6 +264,7 @@ export interface TransportConnection {
   arriveDate?: string; // YYYY-MM-DD — defaults to the previous departure day (next day if the time wraps)
   depart?: string;     // HH:mm — departure from this connection point
   departDate?: string; // YYYY-MM-DD — defaults to the arrival day (next day if the time wraps)
+  carrier?: string;    // airline / operator of the next leg (defaults to the booking's carrier)
   identifier?: string; // next flight #, next train # (not used for boat)
   lat?: number;
   lon?: number;
@@ -291,6 +292,8 @@ export interface TransportLeg {
   travelTimeMinutes?: number;
   connections?: TransportConnection[];
   notes?: string;
+  /** Set when the trip's dates changed and this entry was not updated to match; cleared when edited or dismissed. */
+  needsAttention?: string;
   createdAt: number;
 }
 
@@ -315,6 +318,8 @@ export interface TripLodging {
   confirmationNumber?: string;
   phone?: string;
   notes?: string;
+  /** Set when the trip's dates changed and this stay was not updated to match; cleared when edited or dismissed. */
+  needsAttention?: string;
   createdAt: number;
 }
 

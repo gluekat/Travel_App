@@ -19,6 +19,8 @@ interface Props {
   value: string;
   onChange: (label: string, lat?: number, lon?: number) => void;
   placeholder?: string;
+  /** Accessible name for the input (the visible label lives next to it). */
+  ariaLabel?: string;
   /**
    * 'place' (default) — city / region search via Open-Meteo (same backend
    *   as trip creation; best for transport from/to, home location).
@@ -71,7 +73,7 @@ async function runSearch(
  * Location search input.
  * Calls onChange on every keystroke (free text) and on selection (with coords).
  */
-export function LocationInput({ value, onChange, placeholder, mode = 'place', near }: Props) {
+export function LocationInput({ value, onChange, placeholder, ariaLabel, mode = 'place', near }: Props) {
   const [query, setQuery] = useState(value);
   const [results, setResults] = useState<SearchResult[]>();
   const [busy, setBusy] = useState(false);
@@ -126,6 +128,7 @@ export function LocationInput({ value, onChange, placeholder, mode = 'place', ne
         className={inputClass}
         value={query}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {

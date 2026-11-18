@@ -65,18 +65,30 @@ describe('general categories', () => {
   });
 });
 
-describe('lodging follows trip dates', () => {
-  it('extends stays that ran to the old end date and trims ones past a shortened end', async () => {
+describe('trip date changes propose lodging and transport updates', () => {
+  it('proposes, applies accepted changes, and flags declined ones', async () => {
     const { setTripDates } = await import('../trips/tripService');
+    const { planTripDateAdjustments, applyAdjustments, flagAdjustments } = await import('../trips/tripAdjustments');
     const tripId = await createTrip('Rome', undefined, '2026-06-01', '2026-06-03');
-    await db.tripLodging.bulkAdd([
-      { tripId, name: 'Hotel', checkInDate: '2026-06-01', checkOutDate: '2026-06-03', createdAt: 1 },
+    await db.tripLodging.add({ tripId, name: 'Hotel', checkInDate: '2026-06-01', checkOutDate: '2026-06-03', createdAt: 1 });
+    await db.tripTransport.bulkAdd([
+      { tripId, direction: 'outbound', mode: 'fly', departureDate: '2026-06-01', createdAt: 1 },
+      { tripId, direction: 'return', mode: 'fly', departureDate: '2026-06-03', createdAt: 1 },
     ]);
-    let trip = (await db.trips.get(tripId))!;
+    const trip = (await db.trips.get(tripId))!;
+    const plan = await planTripDateAdjustments(tripId, trip.startDate, trip.endDate, '2026-06-01', '2026-06-05');
+    expect(plan.map((a) => a.key).sort()).toHaveLength(2); // return flight + hotel check-out
     await setTripDates(trip, '2026-06-01', '2026-06-05');
-    expect((await db.tripLodging.toArray())[0].checkOutDate).toBe('2026-06-05');
-    trip = (await db.trips.get(tripId))!;
-    await setTripDates(trip, '2026-06-01', '2026-06-04');
-    expect((await db.tripLodging.toArray())[0].checkOutDate).toBe('2026-06-04');
+    // nothing moves until the user confirms
+    expect((await db.tripLodging.toArray())[0].checkOutDate).toBe('2026-06-03');
+    await flagAdjustments(plan, trip.startDate, trip.endDate);
+    const hotel = plan.find((a) => a.kind === 'lodging')!;
+    await applyAdjustments(plan, new Set([hotel.key]));
+    const [stay] = await db.tripLodging.toArray();
+    expect(stay.checkOutDate).toBe('2026-06-05');
+    expect(stay.needsAttention).toBeUndefined();
+    const ret = (await db.tripTransport.toArray()).find((l) => l.direction === 'return')!;
+    expect(ret.departureDate).toBe('2026-06-03'); // declined: unchanged...
+    expect(ret.needsAttention).toContain('Trip dates changed'); // ...but flagged
   });
 });
