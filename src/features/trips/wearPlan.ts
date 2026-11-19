@@ -76,7 +76,7 @@ export function weatherMismatches(items: ClosetItem[], outfits: Outfit[], tripDa
     if (!bands) continue;
     for (const band of bands) {
       const tooHeavy = item.warmth >= 4 && HOT_BANDS.has(band);
-      const tooLight = item.warmth <= 2 && COLD_BANDS.has(band);
+      const tooLight = item.warmth > 0 && item.warmth <= 2 && COLD_BANDS.has(band);
       const hotTagCold = item.weatherTags.includes('hot') && COLD_BANDS.has(band);
       const coldTagHot = item.weatherTags.includes('cold') && HOT_BANDS.has(band);
       if (tooHeavy || tooLight || hotTagCold || coldTagHot) {

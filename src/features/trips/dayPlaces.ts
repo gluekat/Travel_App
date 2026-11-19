@@ -10,6 +10,10 @@ export interface DayPlace {
   /** Where the day's weather applies. */
   lat?: number;
   lon?: number;
+  /** Travel days: where the day starts (when different from where it ends), for its own weather. */
+  from?: { label: string; lat: number; lon: number };
+  /** Travel days: just the name of where the day ends, e.g. "Rome, Italy". */
+  toLabel?: string;
   /** True when this came from the transport legs rather than the trip's own destination. */
   fromTransport: boolean;
 }
@@ -86,10 +90,12 @@ export function computeDayPlaces(trip: Trip, days: TripDay[], legs: TransportLeg
     const start = at(addDays(d.date, -1));
     const endName = placeName(end.label);
     const startName = start?.label ? placeName(start.label) : undefined;
+    const travelling = !!startName && startName !== endName;
     out.set(d.date, {
-      label: startName && startName !== endName ? `${startName} → ${endName}` : endName,
+      label: travelling ? `${startName} → ${endName}` : endName,
       lat: end.lat,
       lon: end.lon,
+      ...(travelling && start?.lat != null && start.lon != null ? { from: { label: startName, lat: start.lat, lon: start.lon }, toLabel: endName } : {}),
       fromTransport: true,
     });
   }
@@ -99,6 +105,8 @@ export function computeDayPlaces(trip: Trip, days: TripDay[], legs: TransportLeg
 /** True when a day's stored (non-manual) weather was fetched for somewhere other than where the day now is. */
 export function weatherNeedsPlaceRefresh(day: TripDay, trip: Trip, places: Map<string, DayPlace>): boolean {
   if (!day.weather || day.weather.source === 'manual') return false;
+  const from = places.get(day.date)?.from;
+  if (from && day.weatherFrom?.placeKey !== placeKey(from.lat, from.lon)) return true;
   const want = placeKey(places.get(day.date)?.lat, places.get(day.date)?.lon);
   if (!want) return false;
   const base = baseDayPlace(trip, day.date);

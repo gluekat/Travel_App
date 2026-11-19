@@ -4,7 +4,7 @@ import { IS_DEV_CHANNEL } from './lib/channel';
 import { Icon } from './components/ui';
 import { OfflineBanner } from './components/OfflineBanner';
 import { SyncBanner } from './components/SyncBanner';
-import { ClosetPage } from './features/closet/ClosetPage';
+import { ClosetPage, isClosetView } from './features/closet/ClosetPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { TripsPage } from './features/trips/TripsPage';
 import { TripDetail } from './features/trips/TripDetail';
@@ -20,13 +20,13 @@ const NAV = [
 
 function Page({ route }: { route: string[] }): ReactNode {
   const [section = 'trips', id, sub, sub2] = route;
-  if (section === 'closet') return <ClosetPage view={id === 'outfits' || id === 'accessories' || id === 'general' ? id : 'items'} />;
+  if (section === 'closet') return <ClosetPage view={isClosetView(id) ? id : 'items'} />;
   if (section === 'settings') return <SettingsPage />;
   if (section === 'trips' && id) {
     const tripId = Number(id);
     if (sub === 'packing') return <PackingPage tripId={tripId} />;
     if (sub === 'itinerary') return <ItineraryPage tripId={tripId} />;
-    if (sub === 'closet') return <TripClosetPage tripId={tripId} view={sub2 === 'outfits' || sub2 === 'accessories' || sub2 === 'general' ? sub2 : 'items'} />;
+    if (sub === 'closet') return <TripClosetPage tripId={tripId} view={isClosetView(sub2) ? sub2 : 'items'} />;
     return <TripDetail tripId={tripId} />;
   }
   return <TripsPage />;

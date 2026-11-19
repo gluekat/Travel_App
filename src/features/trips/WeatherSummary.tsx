@@ -95,3 +95,18 @@ export function WeatherSummary({ dayId, weather, unit }: { dayId: number; weathe
     </div>
   );
 }
+
+/** One compact weather line, optionally labelled with the place it applies to. */
+export function WeatherLine({ weather, unit, label }: { weather: DayWeather; unit: TempUnit; label?: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm" aria-label={label ? `Weather in ${label}` : 'Weather'}>
+      {label && <span className="min-w-[8rem] text-xs font-semibold text-teal-800">{label}</span>}
+      <span aria-hidden="true">{codeEmoji(weather.code)}</span>
+      <span className="font-medium">
+        {formatTemp(weather.high, unit)} / {formatTemp(weather.low, unit)}
+      </span>
+      <span className="text-slate-600">💧 {Math.round(weather.precipChance)}%</span>
+      <span className="text-slate-600">{weather.condition}</span>
+    </div>
+  );
+}

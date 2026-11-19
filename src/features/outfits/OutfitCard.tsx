@@ -105,7 +105,7 @@ function SwapDialog({ outfit, day, dayIndex, closet, usage, itemId, onClose }: O
                     <span className="block text-sm font-medium">{c.name}</span>
                     <span className="flex flex-wrap gap-x-2 text-xs capitalize text-slate-500">
                       <span>
-                        warmth {c.warmth} · {c.formality}
+                        {c.warmth > 0 ? `warmth ${c.warmth}` : 'no warmth'} · {c.formality}
                       </span>
                       <WearHint item={full} usage={usage} inThisOutfit={false} />
                     </span>

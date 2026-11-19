@@ -7,7 +7,8 @@ import { db } from '../../db/schema';
 import { ItemThumb } from '../../components/ItemThumb';
 import { OutfitCard } from '../outfits/OutfitCard';
 import { addOutfit, addOutfitFromSaved, addSleepwearOutfit } from '../outfits/outfitService';
-import { WeatherSummary } from './WeatherSummary';
+import { WeatherLine, WeatherSummary } from './WeatherSummary';
+import type { DayPlace } from './dayPlaces';
 import { setDayActivities } from './tripService';
 
 interface Props {
@@ -29,11 +30,13 @@ interface Props {
   unit: TempUnit;
   formatTemp: (c: number) => string;
   location?: string;
+  /** Where the day is spent; on travel days it also has the starting place. */
+  place?: DayPlace;
   activities?: ScheduledActivity[];
 }
 
 /** A trip day: its weather, activities and the outfits you've chosen. */
-export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumulativeUsage, prelaundryUsage, warnings, exceededItemIds, unit, formatTemp, location, activities }: Props) {
+export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumulativeUsage, prelaundryUsage, warnings, exceededItemIds, unit, formatTemp, location, place, activities }: Props) {
   const [showAddModal, setShowAddModal] = useState(false);
   const savedOutfits = useLiveQuery(async () => {
     const all = await db.savedOutfits.toArray();
@@ -48,7 +51,15 @@ export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumula
         <span className="font-normal text-slate-500">· {formatDay(day.date)}</span>
         {location && <span className="font-normal text-teal-700"> · {location}</span>}
       </h3>
-      <WeatherSummary dayId={day.id!} weather={day.weather} unit={unit} />
+      {place?.from && day.weatherFrom ? (
+        <div className="space-y-1.5" aria-label="Weather for each location">
+          <WeatherLine weather={day.weatherFrom} unit={unit} label={place.from.label} />
+          <p className="text-xs font-semibold text-teal-800">{place.toLabel}</p>
+          <WeatherSummary dayId={day.id!} weather={day.weather} unit={unit} />
+        </div>
+      ) : (
+        <WeatherSummary dayId={day.id!} weather={day.weather} unit={unit} />
+      )}
 
       {sorted.length > 0 && (
         <div className="mt-3">

@@ -15,6 +15,8 @@ describe('computeDayPlaces', () => {
     const p = computeDayPlaces(trip, days, legs);
     expect(p.get('2026-06-10')).toMatchObject({ label: 'New York, NY', lat: 40.7, fromTransport: true }); // overnight flight: still home
     expect(p.get('2026-06-11')?.label).toBe('New York, NY → Rome, Italy');
+    expect(p.get('2026-06-11')).toMatchObject({ from: { label: 'New York, NY', lat: 40.7 }, toLabel: 'Rome, Italy' });
+    expect(p.get('2026-06-12')?.from).toBeUndefined();
     expect(p.get('2026-06-12')).toMatchObject({ label: 'Rome, Italy', lat: 41.8 });
     expect(p.get('2026-06-14')?.label).toBe('Rome, Italy → New York, NY');
     expect(p.get('2026-06-14')?.lat).toBe(40.7);
@@ -31,8 +33,12 @@ describe('computeDayPlaces', () => {
     const w = { high: 20, low: 10, precipChance: 0, condition: 'x', source: 'forecast' as const, fetchedAt: 1 };
     const d = days[1]; // Jun 11: now New York → Rome, weather at Rome
     expect(weatherNeedsPlaceRefresh({ ...d, weather: { ...w, placeKey: placeKey(40.7, -74.0) } }, trip, places)).toBe(true);
-    expect(weatherNeedsPlaceRefresh({ ...d, weather: { ...w, placeKey: placeKey(41.8, 12.24) } }, trip, places)).toBe(false);
     expect(weatherNeedsPlaceRefresh({ ...d, weather: { ...w, source: 'manual' } }, trip, places)).toBe(false);
+    // a travel day also needs the weather where it starts
+    const here = { ...w, placeKey: placeKey(41.8, 12.24) };
+    const there = { ...w, placeKey: placeKey(40.7, -74.0) };
+    expect(weatherNeedsPlaceRefresh({ ...d, weather: here, weatherFrom: there }, trip, places)).toBe(false);
+    expect(weatherNeedsPlaceRefresh({ ...d, weather: here }, trip, places)).toBe(true); // travel day still missing its starting weather
     expect(weatherNeedsPlaceRefresh({ ...d, weather: w }, trip, places)).toBe(true); // legacy: fetched for the trip's destination (41.9, 12.5)
   });
 });

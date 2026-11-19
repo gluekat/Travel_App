@@ -216,7 +216,7 @@ export function explainOutfit(
     const outer = chosen.find((i) => i.category === 'outerwear');
     if (needs.outerwearMin != null && outer) parts.push(`${capitalize(outer.name.toLowerCase())} (warmth ${outer.warmth}) for the chill.`);
     else if (needs.band === 'hot' || needs.band === 'warm') {
-      if (chosen.some((i) => i.warmth <= 2 && i.category !== 'accessory')) parts.push('Light layers to stay cool.');
+      if (chosen.some((i) => i.warmth > 0 && i.warmth <= 2 && i.category !== 'accessory')) parts.push('Light layers to stay cool.');
     }
     if (isRainy(w)) {
       const rain = chosen.filter((i) => i.weatherTags.includes('rain-ready'));

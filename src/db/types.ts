@@ -31,7 +31,11 @@ export const ACTIVITIES = [
 ] as const;
 export type Activity = (typeof ACTIVITIES)[number];
 
-export type WarmthLevel = 1 | 2 | 3 | 4 | 5;
+/** 1 (very light) to 5 (very warm); 0 means not applicable (e.g. jewelry, a belt). */
+export type WarmthLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+export const ACCESSORY_TYPES = ['hat', 'scarf', 'gloves', 'belt', 'purse', 'bag', 'jewelry', 'other'] as const;
+export type AccessoryType = (typeof ACCESSORY_TYPES)[number];
 
 export const SUBCATEGORIES = ['top', 'bottom', 'one-piece', 'shoes', 'accessories'] as const;
 export type Subcategory = (typeof SUBCATEGORIES)[number];
@@ -52,6 +56,8 @@ export interface ClosetItem {
   category: Category;
   /** For activewear, underwear, and pajamas: 'top' | 'bottom' | 'one-piece'. */
   subcategory?: Subcategory;
+  /** For accessories: hat, scarf, gloves, belt, purse, bag, jewelry… */
+  accessoryType?: AccessoryType;
   color: string;
   warmth: WarmthLevel;
   formality: Formality;
@@ -67,6 +73,10 @@ export interface ClosetItem {
   favorite: number;
   /** Your own labels, e.g. "packable", "wrinkle-free". */
   customTags: string[];
+  /** Optional details. */
+  size?: string;
+  material?: string;
+  notes?: string;
   photo?: Blob;
   isSample: boolean;
   createdAt: number;
@@ -131,6 +141,8 @@ export interface TripDay {
   date: string; // YYYY-MM-DD
   activities: Activity[];
   weather?: DayWeather;
+  /** On days travelling between places: the weather where the day starts (`weather` is where it ends). */
+  weatherFrom?: DayWeather;
   laundryDay?: boolean;
   laundryItems?: number[]; // ClosetItem IDs to wash
 }

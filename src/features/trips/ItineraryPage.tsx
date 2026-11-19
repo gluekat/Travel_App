@@ -11,8 +11,7 @@ import { tripLabel } from './TripDetail';
 import { computeDayPlaces, getDayLocation } from './dayPlaces';
 import { useWeatherSync } from './useWeatherSync';
 import { useTempUnit } from '../../lib/hooks';
-import { formatTemp } from '../../lib/units';
-import { codeEmoji } from '../../weather/wmo';
+import { WeatherLine } from './WeatherSummary';
 import { TransportSection } from './TransportSection';
 import { cruiseRanges, formatMinutes, isCruiseDay, isCruiseNight, travelDaySummary } from './transportPlan';
 
@@ -468,10 +467,16 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
               </div>
 
               {day.weather && (
-                <p className="text-xs text-slate-600" aria-label="Weather">
-                  {codeEmoji(day.weather.code)} {formatTemp(day.weather.high, unit)} / {formatTemp(day.weather.low, unit)} · {day.weather.condition}
-                  {day.weather.precipChance >= 20 && ` · ${day.weather.precipChance}% rain`}
-                </p>
+                <div className="space-y-0.5 text-xs text-slate-600" aria-label="Weather">
+                  {places.get(day.date)?.from && day.weatherFrom ? (
+                    <>
+                      <WeatherLine weather={day.weatherFrom} unit={unit} label={places.get(day.date)!.from!.label} />
+                      <WeatherLine weather={day.weather} unit={unit} label={places.get(day.date)!.toLabel} />
+                    </>
+                  ) : (
+                    <WeatherLine weather={day.weather} unit={unit} />
+                  )}
+                </div>
               )}
 
               {travel.length > 0 && (

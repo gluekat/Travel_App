@@ -35,8 +35,8 @@ export const SAMPLE_WARDROBE: SeedItem[] = [
   { name: 'Sandals', category: 'shoes', color: 'tan', warmth: 1, formality: 'casual', weatherTags: ['hot', 'sun'], activities: ['beach', 'lounging', 'sightseeing'] },
   { name: 'Leather loafers', category: 'shoes', color: 'brown', warmth: 2, formality: 'formal', weatherTags: [], activities: ['business', 'dinner out'] },
   { name: 'Swim trunks', category: 'swimwear', color: 'coral', warmth: 1, formality: 'casual', weatherTags: ['hot', 'sun'], activities: ['beach'] },
-  { name: 'Sun hat', category: 'accessory', color: 'straw', warmth: 1, formality: 'casual', weatherTags: ['sun', 'hot'], activities: ['beach', 'sightseeing', 'hiking'] },
-  { name: 'Wool scarf', category: 'accessory', color: 'burgundy', warmth: 4, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out'] },
+  { name: 'Sun hat', category: 'accessory', accessoryType: 'hat', color: 'straw', warmth: 1, formality: 'casual', weatherTags: ['sun', 'hot'], activities: ['beach', 'sightseeing', 'hiking'] },
+  { name: 'Wool scarf', category: 'accessory', accessoryType: 'scarf', color: 'burgundy', warmth: 4, formality: 'smart casual', weatherTags: ['cold'], activities: ['sightseeing', 'dinner out'] },
 ];
 
 export async function seedSampleWardrobe(): Promise<void> {

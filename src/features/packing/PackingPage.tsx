@@ -10,7 +10,7 @@ import { toEngineItem } from '../outfits/outfitService';
 import { TripTabs } from '../trips/TripTabs';
 import { computeOverWorn, weatherMismatches } from '../trips/wearPlan';
 import { ForecastWarning, visibleForecastItems } from '../trips/ForecastWarning';
-import { GeneralIcon } from '../closet/GeneralItemsView';
+import { GeneralIcon } from '../closet/GeneralItemForm';
 import { ensureGeneralLibrary, saveToGeneralLibrary } from './generalItemsService';
 
 function CheckRow({ row, children }: { row: PackingItem; children: ReactNode }) {

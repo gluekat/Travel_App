@@ -17,33 +17,45 @@ export async function refreshTripWeather(tripId: number, fetchImpl?: FetchLike):
   const legs = await db.tripTransport.where('tripId').equals(tripId).toArray();
   const places = computeDayPlaces(trip, days, legs);
 
-  const groups = new Map<string, { lat: number; lon: number; days: TripDay[] }>();
+  // One task per day and role: "to" is where the day ends (its main weather); "from" is where a travel day starts.
+  type Task = { day: TripDay; role: 'to' | 'from' };
+  const groups = new Map<string, { lat: number; lon: number; tasks: Task[] }>();
+  const add = (day: TripDay, role: Task['role'], lat?: number, lon?: number) => {
+    const key = placeKey(lat, lon);
+    if (!key || lat == null || lon == null) return;
+    const g = groups.get(key) ?? { lat, lon, tasks: [] };
+    g.tasks.push({ day, role });
+    groups.set(key, g);
+  };
   for (const d of days) {
     const p = places.get(d.date);
-    const key = placeKey(p?.lat, p?.lon);
-    if (!key || p?.lat == null || p?.lon == null) continue;
-    const g = groups.get(key) ?? { lat: p.lat, lon: p.lon, days: [] };
-    g.days.push(d);
-    groups.set(key, g);
+    add(d, 'to', p?.lat, p?.lon);
+    if (p?.from) add(d, 'from', p.from.lat, p.from.lon);
   }
   if (!groups.size) throw new Error('Trip has no location yet.');
 
   const errors: string[] = [];
   const resolved = new Map<string, ResolveResult['days'][number]>();
   for (const [key, g] of groups) {
+    const dates = [...new Set(g.tasks.map((t) => t.day.date))].sort();
     // Weather stored for a different place is no use as an offline fallback here.
-    const cached: Record<string, DayWeather | undefined> = Object.fromEntries(
-      g.days.map((d) => [d.date, d.weather && (d.weather.source === 'manual' || !weatherNeedsPlaceRefresh(d, trip, places)) ? d.weather : undefined]),
-    );
-    const result = await resolveWeather({ lat: g.lat, lon: g.lon, dates: g.days.map((d) => d.date), today: todayISO(), cached, fetchImpl });
+    const cached: Record<string, DayWeather | undefined> = {};
+    for (const t of g.tasks) {
+      const w = t.role === 'from' ? t.day.weatherFrom : t.day.weather;
+      cached[t.day.date] = w && (w.source === 'manual' || w.placeKey === key || (t.role === 'to' && !weatherNeedsPlaceRefresh(t.day, trip, places))) ? w : cached[t.day.date];
+    }
+    const result = await resolveWeather({ lat: g.lat, lon: g.lon, dates, today: todayISO(), cached, fetchImpl });
     if (result.error) errors.push(result.error);
+    const byDate = new Map(result.days.map((r) => [r.date, r]));
     await db.transaction('rw', db.tripDays, async () => {
-      for (const r of result.days) {
-        const day = g.days.find((d) => d.date === r.date);
-        if (day?.id != null && r.status === 'live') await db.tripDays.update(day.id, { weather: { ...r.weather!, placeKey: key } });
+      for (const t of g.tasks) {
+        const r = byDate.get(t.day.date);
+        if (t.day.id == null || r?.status !== 'live') continue;
+        const weather = { ...r.weather!, placeKey: key };
+        await db.tripDays.update(t.day.id, t.role === 'from' ? { weatherFrom: weather } : { weather });
       }
     });
-    for (const r of result.days) resolved.set(r.date, r);
+    for (const t of g.tasks) if (t.role === 'to' && byDate.has(t.day.date)) resolved.set(t.day.date, byDate.get(t.day.date)!);
   }
 
   return {
