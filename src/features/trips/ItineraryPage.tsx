@@ -7,7 +7,12 @@ import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components
 import { TimeInput } from '../../components/TimeInput';
 import { LocationInput } from '../../components/LocationInput';
 import { TripTabs } from './TripTabs';
-import { getDayLocation, tripLabel } from './TripDetail';
+import { tripLabel } from './TripDetail';
+import { computeDayPlaces, getDayLocation } from './dayPlaces';
+import { useWeatherSync } from './useWeatherSync';
+import { useTempUnit } from '../../lib/hooks';
+import { formatTemp } from '../../lib/units';
+import { codeEmoji } from '../../weather/wmo';
 import { TransportSection } from './TransportSection';
 import { cruiseRanges, formatMinutes, isCruiseDay, isCruiseNight, travelDaySummary } from './transportPlan';
 
@@ -330,6 +335,9 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
     [],
   );
 
+  useWeatherSync(trip, days, transport);
+  const unit = useTempUnit();
+
   type ActivityFormState = { activity?: ScheduledActivity; dayId: number } | null;
 
   const [activityForm, setActivityForm] = useState<ActivityFormState>(null);
@@ -368,6 +376,7 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
     return lodgingItems.find((s) => s.checkInDate <= date && date < s.checkOutDate);
   }
 
+  const places = computeDayPlaces(trip, days, transport);
   const location = trip.stops && trip.stops.length > 1 ? trip.stops.map((s) => shortLocation(s.label)).join(' → ') : trip.placeLabel ?? trip.destination;
 
   return (
@@ -405,7 +414,7 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
             <LodgingCard
               key={stay.id}
               stay={stay}
-              tripCity={getDayLocation(trip, stay.checkInDate)}
+              tripCity={places.get(stay.checkInDate)?.label ?? getDayLocation(trip, stay.checkInDate)}
               onEdit={() => setLodgingForm(stay)}
               onDelete={() => void deleteLodging(stay)}
             />
@@ -448,7 +457,7 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                 <h3 className="text-sm font-semibold text-slate-700">
                   Day {i + 1} · {formatDay(day.date)}
-                  {(() => { const loc = getDayLocation(trip, day.date); return loc ? <span className="font-normal text-teal-700"> · {loc}</span> : null; })()}
+                  {(() => { const loc = places.get(day.date)?.label ?? getDayLocation(trip, day.date); return loc ? <span className="font-normal text-teal-700"> · {loc}</span> : null; })()}
                 </h3>
                 {cruiseDay && <span className="text-xs font-medium text-sky-700">🛳️ Cruise day</span>}
                 {!isLastDay && !cruiseNight && (
@@ -457,6 +466,13 @@ export function ItineraryPage({ tripId }: { tripId: number }) {
                     : <span className="text-xs text-amber-600">🏨 No lodging</span>
                 )}
               </div>
+
+              {day.weather && (
+                <p className="text-xs text-slate-600" aria-label="Weather">
+                  {codeEmoji(day.weather.code)} {formatTemp(day.weather.high, unit)} / {formatTemp(day.weather.low, unit)} · {day.weather.condition}
+                  {day.weather.precipChance >= 20 && ` · ${day.weather.precipChance}% rain`}
+                </p>
+              )}
 
               {travel.length > 0 && (
                 <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-900" aria-label="Travel day summary">

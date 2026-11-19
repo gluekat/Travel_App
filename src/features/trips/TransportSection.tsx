@@ -24,6 +24,23 @@ function Place({ label, time, date, refDate }: { label: string; time?: string; d
   );
 }
 
+function OverviewPlace({ title, seg, place, which }: { title: string; seg?: Segment; place: string; which: 'depart' | 'arrive' }) {
+  const date = which === 'depart' ? seg?.departDate : seg?.arriveDate;
+  const time = which === 'depart' ? seg?.departTime : seg?.arriveTime;
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-teal-800">{title}</p>
+      <p className="text-sm font-semibold">{place || '—'}</p>
+      {date && (
+        <p className="text-xs text-slate-600">
+          {formatDay(date)}
+          {time && ` · ${fmt12h(time)}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SegmentRow({ seg, onEdit, onDelete, onDismiss, first }: { seg: Segment; onEdit: () => void; onDelete: () => void; onDismiss: () => void; first: boolean }) {
   const detail = [seg.carrier, seg.identifier, seg.bookingRef ? `Ref ${seg.bookingRef}` : undefined].filter(Boolean).join(' · ');
   return (
@@ -122,33 +139,14 @@ export function TransportSection({ tripId, trip, legs, home, homeAirport }: { tr
       </div>
 
       {legs.length > 0 && (
-        <div className="grid gap-3 rounded-xl border border-teal-100 bg-teal-50 p-4 sm:grid-cols-2" aria-label="Transportation overview">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-teal-800">Departure location</p>
-            <p className="text-sm font-semibold">{overview.from || '—'}</p>
-            {overview.departure?.departDate && (
-              <p className="text-xs text-slate-600">
-                {formatDay(overview.departure.departDate)}
-                {overview.departure.departTime && ` · ${fmt12h(overview.departure.departTime)}`}
-              </p>
-            )}
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-teal-800">Final arrival destination</p>
-            <p className="text-sm font-semibold">{overview.to || '—'}</p>
-            {overview.arrival?.arriveDate && (
-              <p className="text-xs text-slate-600">
-                {formatDay(overview.arrival.arriveDate)}
-                {overview.arrival.arriveTime && ` · ${fmt12h(overview.arrival.arriveTime)}`}
-              </p>
-            )}
-          </div>
-          {overview.returnArrival && (
-            <p className="text-xs text-slate-600 sm:col-span-2">
-              ← Returns to {overview.returnArrival.to}
-              {overview.returnArrival.arriveDate && ` on ${formatDay(overview.returnArrival.arriveDate)}`}
-              {overview.returnArrival.arriveTime && ` at ${fmt12h(overview.returnArrival.arriveTime)}`}
-            </p>
+        <div className="grid gap-x-6 gap-y-3 rounded-xl border border-teal-100 bg-teal-50 p-4 sm:grid-cols-2" aria-label="Transportation overview">
+          <OverviewPlace title="Departure location" seg={overview.departure} place={overview.from} which="depart" />
+          <OverviewPlace title="Final arrival destination" seg={overview.arrival} place={overview.to} which="arrive" />
+          {overview.returnDeparture && (
+            <>
+              <OverviewPlace title="Return departure location" seg={overview.returnDeparture} place={overview.returnDeparture.from} which="depart" />
+              <OverviewPlace title="Return arrival location" seg={overview.returnArrival} place={overview.returnArrival?.to ?? ''} which="arrive" />
+            </>
           )}
           {overview.oneWay && <p className="text-xs text-slate-600 sm:col-span-2">One-way travel: only {legs[0].direction === 'outbound' ? 'an outbound' : 'a return'} trip is planned.</p>}
         </div>
@@ -339,14 +337,19 @@ function LabeledBox({ label, children }: { label: string; children: ReactNode })
 }
 
 function DateTimeBox({ label, date, time, dateRequired, onDate, onTime }: { label: string; date: string; time: string; dateRequired?: boolean; onDate: (v: string) => void; onTime: (v: string) => void }) {
+  // Wraps (rather than overlaps) when the dialog is narrow; the time picker keeps its own space to the right of the date.
   return (
-    <div className="grid gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-      <LabeledBox label={`${label} date`}>
-        <input type="date" className={`${inputClass} min-w-0`} value={date} onChange={(e) => onDate(e.target.value)} required={dateRequired} aria-label={`${label} date`} />
-      </LabeledBox>
-      <LabeledBox label={`${label} time`}>
-        <TimeInput value={time} onChange={onTime} />
-      </LabeledBox>
+    <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
+      <div className="min-w-[11rem] flex-1">
+        <LabeledBox label={`${label} date`}>
+          <input type="date" className={`${inputClass} min-w-0`} value={date} onChange={(e) => onDate(e.target.value)} required={dateRequired} aria-label={`${label} date`} />
+        </LabeledBox>
+      </div>
+      <div className="shrink-0">
+        <LabeledBox label={`${label} time`}>
+          <TimeInput value={time} onChange={onTime} />
+        </LabeledBox>
+      </div>
     </div>
   );
 }

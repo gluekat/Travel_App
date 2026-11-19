@@ -8,6 +8,11 @@ import { defaultPackingRows, ensureGeneralLibrary } from '../packing/generalItem
 
 export const MAX_TRIP_DAYS = 30;
 
+/** Activities a new day starts with: sightseeing, plus "travel day" on the first and last day of the trip. */
+export function defaultDayActivities(date: string, startDate: string, endDate: string): Activity[] {
+  return date === startDate || date === endDate ? ['sightseeing', 'travel day'] : ['sightseeing'];
+}
+
 export async function createTrip(
   destination: string,
   place: Place | undefined,
@@ -35,7 +40,7 @@ export async function createTrip(
       stops: hasStops ? stops : undefined,
     })) as number;
     const dayIds = (await db.tripDays.bulkAdd(
-      dates.map((date) => ({ tripId, date, activities: ['sightseeing'] as Activity[] })),
+      dates.map((date) => ({ tripId, date, activities: defaultDayActivities(date, startDate, endDate) })),
       { allKeys: true },
     )) as number[];
     await db.outfits.bulkAdd(dayIds.map((dayId) => emptyOutfit(tripId, dayId)));
@@ -65,10 +70,14 @@ export async function setTripDates(trip: Trip, startDate: string, endDate: strin
     await db.tripDays.bulkDelete(drop.map((d) => d.id!));
     const have = new Set(existing.map((d) => d.date));
     const added = (await db.tripDays.bulkAdd(
-      dates.filter((d) => !have.has(d)).map((date) => ({ tripId, date, activities: ['sightseeing'] as Activity[] })),
+      dates.filter((d) => !have.has(d)).map((date) => ({ tripId, date, activities: defaultDayActivities(date, startDate, endDate) })),
       { allKeys: true },
     )) as number[];
     await db.outfits.bulkAdd(added.map((dayId) => emptyOutfit(tripId, dayId)));
+    // The (new) first and last days are travel days.
+    await db.tripDays.where('tripId').equals(tripId).filter((d) => (d.date === startDate || d.date === endDate) && !d.activities.includes('travel day')).modify((d) => {
+      d.activities = [...d.activities, 'travel day'];
+    });
     await db.trips.update(tripId, { startDate, endDate });
   });
   await syncPacking(tripId);
