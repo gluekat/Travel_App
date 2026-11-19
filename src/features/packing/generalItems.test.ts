@@ -92,3 +92,14 @@ describe('trip date changes propose lodging and transport updates', () => {
     expect(ret.needsAttention).toContain('Trip dates changed'); // ...but flagged
   });
 });
+
+describe('travel days', () => {
+  it('marks the first and last day of a new trip, and the new ends when dates change', async () => {
+    const { setTripDates } = await import('../trips/tripService');
+    const tripId = await createTrip('Rome', undefined, '2026-06-01', '2026-06-04');
+    const list = async () => (await db.tripDays.where('tripId').equals(tripId).sortBy('date')).map((d) => d.activities.includes('travel day'));
+    expect(await list()).toEqual([true, false, false, true]);
+    await setTripDates((await db.trips.get(tripId))!, '2026-06-01', '2026-06-05');
+    expect(await list()).toEqual([true, false, false, true, true]);
+  });
+});

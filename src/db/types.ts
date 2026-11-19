@@ -121,6 +121,8 @@ export interface DayWeather {
   condition: string;
   source: WeatherSource;
   fetchedAt: number;
+  /** Rounded "lat,lon" the weather was fetched for, so it can be refreshed when the day's location changes. */
+  placeKey?: string;
 }
 
 export interface TripDay {

@@ -11,6 +11,10 @@ export interface Segment {
   mode: TransportMode;
   from: string;
   to: string;
+  fromLat?: number;
+  fromLon?: number;
+  toLat?: number;
+  toLon?: number;
   departDate?: string;
   departTime?: string;
   arriveDate?: string;
@@ -101,6 +105,10 @@ export function legSegments(leg: TransportLeg): Omit<Segment, 'n' | 'layoverMinu
       mode: leg.mode,
       from: points[k].label,
       to: points[k + 1].label,
+      fromLat: points[k].lat,
+      fromLon: points[k].lon,
+      toLat: points[k + 1].lat,
+      toLon: points[k + 1].lon,
       departDate,
       departTime,
       arriveDate,
@@ -162,7 +170,8 @@ export interface TransportOverview {
   arrival?: Segment;
   from: string;
   to: string;
-  /** The final leg of the way back, when a return is planned too. */
+  /** The way back, when a return is planned too: where it leaves from and where it ends up. */
+  returnDeparture?: Segment;
   returnArrival?: Segment;
   oneWay: boolean;
 }
@@ -179,6 +188,7 @@ export function transportOverview(legs: TransportLeg[]): TransportOverview {
     arrival: last,
     from: first?.from ?? '',
     to: last?.to ?? '',
+    returnDeparture: outbound.length && back.length ? back[0] : undefined,
     returnArrival: outbound.length && back.length ? back[back.length - 1] : undefined,
     oneWay: new Set(legs.map((l) => l.direction)).size < 2,
   };

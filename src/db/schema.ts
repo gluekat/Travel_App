@@ -63,6 +63,19 @@ export class PackWiseDB extends Dexie {
     this.version(6).stores({
       generalItems: '++id, isDefault, *tags',
     });
+    // v7: the first and last day of every trip are travel days.
+    this.version(7)
+      .stores({})
+      .upgrade(async (tx) => {
+        const days = await tx.table('tripDays').toArray();
+        const trips = new Map((await tx.table('trips').toArray()).map((t) => [t.id, t]));
+        for (const d of days) {
+          const t = trips.get(d.tripId);
+          if (t && (d.date === t.startDate || d.date === t.endDate) && !d.activities?.includes('travel day')) {
+            await tx.table('tripDays').update(d.id, { activities: [...(d.activities ?? []), 'travel day'] });
+          }
+        }
+      });
   }
 }
 
