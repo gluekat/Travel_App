@@ -1,134 +1,184 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteClosetItem } from '../../db/schema';
-import { CATEGORIES, WEATHER_TAGS, ACTIVITIES, type Category, type ClosetItem } from '../../db/types';
+import { ACCESSORY_TYPES, ACTIVITIES, CATEGORIES, WEATHER_TAGS, type ClosetItem } from '../../db/types';
 import { clearSampleItems, seedSampleWardrobe } from '../../db/seed';
 import { Stars } from '../../components/Stars';
 import { Tabs } from '../../components/Tabs';
-import { Button, Chip, Icon, Modal, inputClass } from '../../components/ui';
+import { Button, Chip, Icon, inputClass } from '../../components/ui';
 import { ItemThumb } from '../../components/ItemThumb';
-import { ItemForm, type ItemFormHandle } from './ItemForm';
 import { SavedOutfitsView } from './SavedOutfitsView';
-import { GeneralItemsView } from './GeneralItemsView';
+import { GeneralItemCard, GeneralItemsView, ItemEditorModal, deleteGeneralItem } from './GeneralItemsView';
+import type { EditorTarget } from './ItemEditor';
+import { ensureGeneralLibrary } from '../packing/generalItemsService';
+import { groupEntries, inScope, isAccessory, isClothing, isShoes, matchesFilters, sortEntries, type Entry, type GroupBy, type Scope, type SortKey } from './closetScopes';
 
-export type ClosetView = 'items' | 'outfits' | 'accessories' | 'general';
+export type ClosetView = 'items' | 'clothing' | 'shoes' | 'accessories' | 'general' | 'outfits';
 
-const isAccessory = (i: ClosetItem) => i.category === 'accessory' || i.subcategory === 'accessories';
+export const isClosetView = (v?: string): v is ClosetView => ['outfits', 'clothing', 'shoes', 'accessories', 'general'].includes(v ?? '');
 
-/** Matches built-in weather/activity tags and custom tags (prefixed "#"). */
-export function filterItems(items: ClosetItem[], query: string, category: Category | null, tag: string | null, favoritesOnly = false) {
-  const q = query.trim().toLowerCase();
-  const custom = tag?.startsWith('#') ? tag.slice(1) : null;
-  return items.filter(
-    (i) =>
-      (!category || i.category === category) &&
-      (!favoritesOnly || (i.favorite ?? 0) >= 4) &&
-      (!tag ||
-        (custom != null ? (i.customTags ?? []).includes(custom) : (i.weatherTags as string[]).includes(tag) || (i.activities as string[]).includes(tag))) &&
-      (!q || i.name.toLowerCase().includes(q) || i.color.toLowerCase().includes(q) || (i.customTags ?? []).some((t) => t.includes(q))),
-  );
-}
+const SCOPE_OF: Partial<Record<ClosetView, Scope>> = { items: 'all', clothing: 'clothing', shoes: 'shoes', accessories: 'accessories' };
+const CLOTHING_CATEGORIES = CATEGORIES.filter((c) => c !== 'shoes' && c !== 'accessory');
 
 export function ClosetTabs({ current, basePath = '#/closet' }: { current: ClosetView; basePath?: string }) {
-  const items = useLiveQuery(() => db.closetItems.filter((i) => !isAccessory(i)).count(), []);
-  const outfits = useLiveQuery(() => db.savedOutfits.count(), []);
-  const accessories = useLiveQuery(() => db.closetItems.filter(isAccessory).count(), []);
-  const general = useLiveQuery(() => db.generalItems.count(), []);
+  const counts = useLiveQuery(async () => {
+    const [closet, general, outfits] = await Promise.all([db.closetItems.toArray(), db.generalItems.count(), db.savedOutfits.count()]);
+    return { all: closet.length + general, clothing: closet.filter(isClothing).length, shoes: closet.filter(isShoes).length, accessories: closet.filter(isAccessory).length, general, outfits };
+  }, []);
+  const n = (v?: number) => (v != null ? ` (${v})` : '');
   return (
     <Tabs
       label="Closet sections"
       current={current}
       tabs={[
-        { id: 'items', label: `Items${items != null ? ` (${items})` : ''}`, href: basePath },
-        { id: 'accessories', label: `Accessories${accessories != null ? ` (${accessories})` : ''}`, href: `${basePath}/accessories` },
-        { id: 'general', label: `General${general != null ? ` (${general})` : ''}`, href: `${basePath}/general` },
-        { id: 'outfits', label: `Outfits${outfits != null ? ` (${outfits})` : ''}`, href: `${basePath}/outfits` },
+        { id: 'items', label: `Items${n(counts?.all)}`, href: basePath },
+        { id: 'clothing', label: `Clothing${n(counts?.clothing)}`, href: `${basePath}/clothing` },
+        { id: 'shoes', label: `Shoes${n(counts?.shoes)}`, href: `${basePath}/shoes` },
+        { id: 'accessories', label: `Accessories${n(counts?.accessories)}`, href: `${basePath}/accessories` },
+        { id: 'general', label: `General${n(counts?.general)}`, href: `${basePath}/general` },
+        { id: 'outfits', label: `Outfits${n(counts?.outfits)}`, href: `${basePath}/outfits` },
       ]}
     />
   );
 }
 
-function ItemsView({ scope = 'all' }: { scope?: 'all' | 'accessories' }) {
-  const allItems = useLiveQuery(() => db.closetItems.orderBy('updatedAt').reverse().toArray(), []);
-  const items = useMemo(() => (scope === 'accessories' ? allItems?.filter(isAccessory) : allItems?.filter((i) => !isAccessory(i))), [allItems, scope]);
-  const customTags = useLiveQuery(async () => (await db.closetItems.orderBy('customTags').uniqueKeys()) as string[], [], []);
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<Category | null>(null);
-  const [tag, setTag] = useState<string | null>(null);
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [sort, setSort] = useState<'default' | 'name' | 'category' | 'favorite' | 'warmth' | 'formality' | 'weather' | 'activity' | 'customtags'>('default');
-  const [editing, setEditing] = useState<ClosetItem | 'new' | null>(null);
-  const editFormRef = useRef<ItemFormHandle>(null);
+const SCOPE_TEXT: Record<Scope, { empty: string; addCategory?: ClosetItem['category'] }> = {
+  all: { empty: 'Your closet is empty.' },
+  clothing: { empty: 'No clothing yet. Tops, bottoms, dresses, outerwear and more appear here.' },
+  shoes: { empty: 'No shoes yet.', addCategory: 'shoes' },
+  accessories: { empty: 'No accessories yet. Add a hat, scarf, gloves, belt, purse, bag or jewelry.', addCategory: 'accessory' },
+};
 
-  const visible = useMemo(() => {
-    const filtered = filterItems(items ?? [], query, category, tag, favoritesOnly);
-    if (sort === 'default') return filtered;
-    return [...filtered].sort((a, b) => {
-      switch (sort) {
-        case 'name': return a.name.localeCompare(b.name);
-        case 'category': return a.category.localeCompare(b.category);
-        case 'favorite': return (b.favorite ?? 0) - (a.favorite ?? 0);
-        case 'warmth': return b.warmth - a.warmth;
-        case 'formality': {
-          const order: Record<string, number> = { casual: 0, 'smart casual': 1, formal: 2 };
-          return (order[a.formality] ?? 0) - (order[b.formality] ?? 0);
-        }
-        case 'weather': return b.weatherTags.length - a.weatherTags.length;
-        case 'activity': return b.activities.length - a.activities.length;
-        case 'customtags': return (b.customTags?.length ?? 0) - (a.customTags?.length ?? 0);
-        default: return 0;
-      }
-    });
-  }, [items, query, category, tag, favoritesOnly, sort]);
-  const sampleCount = allItems?.filter((i) => i.isSample).length ?? 0;
-
-  async function remove(item: ClosetItem) {
-    if (item.id != null && confirm(`Delete "${item.name}"? It will also be removed from trip and saved outfits.`)) {
-      await deleteClosetItem(item.id);
-    }
+function ClosetItemCard({ item, onEdit, onTag }: { item: ClosetItem; onEdit: () => void; onTag: (t: string) => void }) {
+  async function remove() {
+    if (item.id != null && confirm(`Delete "${item.name}"? It will also be removed from trip and saved outfits.`)) await deleteClosetItem(item.id);
   }
-
-  async function duplicate(item: ClosetItem) {
+  async function duplicate() {
     const { id: _id, ...rest } = item;
     const now = Date.now();
     await db.closetItems.add({ ...rest, name: `${item.name} (duplicate)`, isSample: false, createdAt: now, updatedAt: now });
   }
+  const details = [item.size && `size ${item.size}`, item.material].filter(Boolean).join(' · ');
+  return (
+    <li className="flex gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <ItemThumb item={item} size="h-16 w-16" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate font-medium">
+              {item.name}
+              {(item.quantity ?? 1) > 1 && <span className="ml-1 text-sm font-normal text-slate-500">×{item.quantity}</span>}
+            </p>
+            <p className="text-xs capitalize text-slate-500">
+              {item.category}
+              {item.accessoryType ? ` · ${item.accessoryType}` : ''}
+              {item.subcategory ? ` · ${item.subcategory}` : ''} · {item.color || 'no color'} · {item.warmth > 0 ? `warmth ${item.warmth}` : 'no warmth'} · {item.formality} ·{' '}
+              <span className="normal-case">{item.unlimitedWear ? '∞ wears per wash' : `${item.wearCount ?? 1} wear${(item.wearCount ?? 1) > 1 ? 's' : ''} per wash`}</span>
+            </p>
+            {details && <p className="text-xs text-slate-500">{details}</p>}
+            {item.notes && <p className="line-clamp-2 text-xs italic text-slate-400">{item.notes}</p>}
+          </div>
+          <div className="flex shrink-0">
+            <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" onClick={onEdit} aria-label={`Edit ${item.name}`} title="Edit">
+              <Icon name="edit" />
+            </button>
+            <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => void duplicate()} aria-label={`Duplicate ${item.name}`} title="Duplicate">
+              <Icon name="copy" />
+            </button>
+            <button className="rounded p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => void remove()} aria-label={`Delete ${item.name}`} title="Delete">
+              <Icon name="trash" />
+            </button>
+          </div>
+        </div>
+        <Stars size="sm" label={`Favorite score for ${item.name}`} value={item.favorite ?? 0} onChange={(v) => db.closetItems.update(item.id!, { favorite: v, updatedAt: Date.now() })} />
+        <div className="mt-1 flex flex-wrap gap-1">
+          {(item.customTags ?? []).map((t) => (
+            <button key={t} onClick={() => onTag(`#${t}`)} className="rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-medium text-indigo-800 hover:bg-indigo-200">
+              #{t}
+            </button>
+          ))}
+          {[...item.weatherTags, ...item.activities].map((t) => (
+            <span key={t} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+              {t}
+            </span>
+          ))}
+          {item.isSample && (
+            <button onClick={() => db.closetItems.update(item.id!, { isSample: false, updatedAt: Date.now() })} className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800 hover:bg-amber-200" title="Remove sample tag">
+              sample ×
+            </button>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function ItemsView({ scope }: { scope: Scope }) {
+  useEffect(() => {
+    if (scope === 'all') void ensureGeneralLibrary();
+  }, [scope]);
+  const closetItems = useLiveQuery(() => db.closetItems.toArray(), []);
+  const generalItems = useLiveQuery(() => db.generalItems.toArray(), []);
+  const customTags = useMemo(
+    () => [...new Set([...(closetItems ?? []).flatMap((i) => i.customTags ?? []), ...(scope === 'all' ? (generalItems ?? []).flatMap((g) => g.tags).filter((t) => !(ACTIVITIES as readonly string[]).includes(t)) : [])])].sort(),
+    [closetItems, generalItems, scope],
+  );
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [accessoryType, setAccessoryType] = useState<string | null>(null);
+  const [tag, setTag] = useState<string | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [sort, setSort] = useState<SortKey>('default');
+  const [group, setGroup] = useState<GroupBy>(scope === 'accessories' ? 'type' : 'none');
+  const [editing, setEditing] = useState<EditorTarget | null>(null);
+
+  const entries = useMemo<Entry[]>(
+    () => [...(closetItems ?? []).map((item) => ({ kind: 'closet' as const, item })), ...(scope === 'all' ? (generalItems ?? []).map((item) => ({ kind: 'general' as const, item })) : [])].filter((e) => inScope(e, scope)),
+    [closetItems, generalItems, scope],
+  );
+  const visible = useMemo(() => sortEntries(entries.filter((e) => matchesFilters(e, { query, category, tag, favoritesOnly, accessoryType })), sort), [entries, query, category, tag, favoritesOnly, accessoryType, sort]);
+  const groups = useMemo(() => groupEntries(visible, group), [visible, group]);
+  const sampleCount = closetItems?.filter((i) => i.isSample).length ?? 0;
+  const text = SCOPE_TEXT[scope];
+  const categoryChips = scope === 'all' ? [...CATEGORIES, 'general'] : scope === 'clothing' ? CLOTHING_CATEGORIES : [];
+  const groupOptions: { value: GroupBy; label: string }[] =
+    scope === 'accessories' ? [{ value: 'none', label: 'Group: None' }, { value: 'type', label: 'Group: Type' }] : scope === 'shoes' ? [] : [{ value: 'none', label: 'Group: None' }, { value: 'category', label: 'Group: Category' }];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
         {scope === 'all' && sampleCount > 0 && (
-          <Button
-            variant="danger"
-            onClick={async () => {
-              if (confirm(`Remove all ${sampleCount} sample items?`)) await clearSampleItems();
-            }}
-          >
+          <Button variant="danger" onClick={async () => confirm(`Remove all ${sampleCount} sample items?`) && (await clearSampleItems())}>
             Clear samples
           </Button>
         )}
-        <Button variant="primary" onClick={() => setEditing('new')}>
+        <Button variant="primary" onClick={() => setEditing({ kind: 'closet' })}>
           <Icon name="plus" /> Add item
         </Button>
       </div>
 
       <div className="space-y-2">
-        <input
-          type="search"
-          className={inputClass}
-          placeholder="Search by name, color or tag…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search closet"
-        />
-        {scope === 'all' && (
+        <input type="search" className={inputClass} placeholder="Search by name, color, size, material or tag…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search closet" />
+        {categoryChips.length > 0 && (
           <div className="flex flex-wrap gap-1.5" aria-label="Filter by category">
             <Chip active={!category} onClick={() => setCategory(null)}>
               all
             </Chip>
-            {CATEGORIES.map((c) => (
+            {categoryChips.map((c) => (
               <Chip key={c} active={category === c} onClick={() => setCategory(category === c ? null : c)}>
                 {c}
+              </Chip>
+            ))}
+          </div>
+        )}
+        {scope === 'accessories' && (
+          <div className="flex flex-wrap gap-1.5" aria-label="Filter by accessory type">
+            <Chip active={!accessoryType} onClick={() => setAccessoryType(null)}>
+              all
+            </Chip>
+            {ACCESSORY_TYPES.map((t) => (
+              <Chip key={t} active={accessoryType === t} onClick={() => setAccessoryType(accessoryType === t ? null : t)}>
+                {t}
               </Chip>
             ))}
           </div>
@@ -156,7 +206,7 @@ function ItemsView({ scope = 'all' }: { scope?: 'all' | 'accessories' }) {
               </optgroup>
             )}
           </select>
-          <select className={`${inputClass} sm:w-44`} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort by">
+          <select className={`${inputClass} sm:w-44`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort by">
             <option value="default">Sort: Date added</option>
             <option value="name">Sort: Name A→Z</option>
             <option value="category">Sort: Category</option>
@@ -167,19 +217,28 @@ function ItemsView({ scope = 'all' }: { scope?: 'all' | 'accessories' }) {
             <option value="activity">Sort: Activity tags</option>
             <option value="customtags">Sort: Custom tags</option>
           </select>
+          {groupOptions.length > 0 && (
+            <select className={`${inputClass} sm:w-44`} value={group} onChange={(e) => setGroup(e.target.value as GroupBy)} aria-label="Group by">
+              {groupOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
           <Chip active={favoritesOnly} onClick={() => setFavoritesOnly(!favoritesOnly)}>
             ★ favorites (4+)
           </Chip>
         </div>
       </div>
 
-      {items && items.length === 0 && (
+      {closetItems && entries.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">
-          {scope === 'accessories' ? (
-            'No accessories yet. Add a hat, belt, scarf, sunglasses…'
-          ) : (
+          {text.empty}
+          {scope === 'all' && (
             <>
-              Your closet is empty. Add your first item, or{' '}
+              {' '}
+              Add your first item, or{' '}
               <button className="font-medium text-teal-700 underline" onClick={() => seedSampleWardrobe()}>
                 load a sample wardrobe
               </button>
@@ -189,99 +248,39 @@ function ItemsView({ scope = 'all' }: { scope?: 'all' | 'accessories' }) {
         </div>
       )}
 
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {visible.map((item) => (
-          <li key={item.id} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <ItemThumb item={item} size="h-16 w-16" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {item.name}
-                    {(item.quantity ?? 1) > 1 && <span className="ml-1 text-sm font-normal text-slate-500">×{item.quantity}</span>}
-                  </p>
-                  <p className="text-xs capitalize text-slate-500">
-                    {item.category}{item.subcategory ? ` · ${item.subcategory}` : ''} · {item.color || 'no color'} · warmth {item.warmth} · {item.formality} ·{' '}
-                    <span className="normal-case">
-                      {item.unlimitedWear ? '∞ wears per wash' : `${item.wearCount ?? 1} wear${(item.wearCount ?? 1) > 1 ? 's' : ''} per wash`}
-                    </span>
-                  </p>
-                </div>
-                <div className="flex shrink-0">
-                  <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(item)} aria-label={`Edit ${item.name}`} title="Edit">
-                    <Icon name="edit" />
-                  </button>
-                  <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => duplicate(item)} aria-label={`Duplicate ${item.name}`} title="Duplicate">
-                    <Icon name="copy" />
-                  </button>
-                  <button className="rounded p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => remove(item)} aria-label={`Delete ${item.name}`} title="Delete">
-                    <Icon name="trash" />
-                  </button>
-                </div>
-              </div>
-              <Stars
-                size="sm"
-                label={`Favorite score for ${item.name}`}
-                value={item.favorite ?? 0}
-                onChange={(n) => db.closetItems.update(item.id!, { favorite: n, updatedAt: Date.now() })}
-              />
-              <div className="mt-1 flex flex-wrap gap-1">
-                {(item.customTags ?? []).map((t) => (
-                  <button key={t} onClick={() => setTag(`#${t}`)} className="rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-medium text-indigo-800 hover:bg-indigo-200">
-                    #{t}
-                  </button>
-                ))}
-                {[...item.weatherTags, ...item.activities].map((t) => (
-                  <span key={t} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
-                    {t}
-                  </span>
-                ))}
-                {item.isSample && (
-                  <button
-                    onClick={() => db.closetItems.update(item.id!, { isSample: false, updatedAt: Date.now() })}
-                    className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800 hover:bg-amber-200"
-                    title="Remove sample tag"
-                  >
-                    sample ×
-                  </button>
-                )}
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-      {items && items.length > 0 && visible.length === 0 && <p className="text-sm text-slate-500">No items match these filters.</p>}
+      {groups.map((g) => (
+        <section key={g.label ?? 'all'} className="space-y-2" aria-label={g.label ?? 'Items'}>
+          {g.label && (
+            <h2 className="text-sm font-semibold capitalize text-slate-700">
+              {g.label} <span className="font-normal text-slate-400">({g.entries.length})</span>
+            </h2>
+          )}
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {g.entries.map((e) =>
+              e.kind === 'closet' ? (
+                <ClosetItemCard key={`c${e.item.id}`} item={e.item} onEdit={() => setEditing({ kind: 'closet', item: e.item })} onTag={setTag} />
+              ) : (
+                <GeneralItemCard key={`g${e.item.id}`} item={e.item} onEdit={() => setEditing({ kind: 'general', item: e.item })} onDelete={() => void deleteGeneralItem(e.item)} onTag={setTag} />
+              ),
+            )}
+          </ul>
+        </section>
+      ))}
+      {entries.length > 0 && visible.length === 0 && <p className="text-sm text-slate-500">No items match these filters.</p>}
 
-      {editing && (
-        <Modal
-          title={editing === 'new' ? (scope === 'accessories' ? 'Add accessory' : 'Add closet item') : 'Edit item'}
-          onClose={() => {
-            if (editing !== 'new') {
-              void editFormRef.current?.save();
-            } else {
-              setEditing(null);
-            }
-          }}
-        >
-          <ItemForm
-            ref={editing === 'new' ? undefined : editFormRef}
-            item={editing === 'new' ? undefined : editing}
-            defaultCategory={scope === 'accessories' ? 'accessory' : undefined}
-            onDone={() => setEditing(null)}
-          />
-        </Modal>
-      )}
+      {editing && <ItemEditorModal target={editing} defaultCategory={text.addCategory} onClose={() => setEditing(null)} />}
     </div>
   );
 }
 
 /** The closet. `basePath` lets it be embedded under a trip (e.g. #/trips/3/closet) with its own tab links. */
 export function ClosetPage({ view = 'items', basePath = '#/closet', embedded = false }: { view?: ClosetView; basePath?: string; embedded?: boolean }) {
+  const scope = SCOPE_OF[view];
   return (
     <div className="space-y-4">
       {!embedded && <h1 className="text-xl font-semibold">Closet</h1>}
       <ClosetTabs current={view} basePath={basePath} />
-      {view === 'outfits' ? <SavedOutfitsView /> : view === 'general' ? <GeneralItemsView /> : <ItemsView key={view} scope={view === 'accessories' ? 'accessories' : 'all'} />}
+      {view === 'outfits' ? <SavedOutfitsView /> : view === 'general' ? <GeneralItemsView /> : <ItemsView key={view} scope={scope ?? 'all'} />}
     </div>
   );
 }

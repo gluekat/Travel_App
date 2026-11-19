@@ -472,6 +472,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
             day={d}
             index={i + 1}
             location={places?.get(d.date)?.label ?? getDayLocation(trip, d.date)}
+            place={places?.get(d.date)}
             outfits={outfits.filter((o) => o.tripDayId === d.id)}
             closet={closet}
             usage={cycleUsageByDayId.get(d.id!) ?? new Map()}

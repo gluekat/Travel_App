@@ -2,11 +2,13 @@ import { forwardRef, useCallback, useImperativeHandle, useState, type FormEvent 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import {
+  ACCESSORY_TYPES,
   ACTIVITIES,
   CATEGORIES,
   FORMALITIES,
   subcategoriesFor,
   WEATHER_TAGS,
+  type AccessoryType,
   type Category,
   type ClosetItem,
   type Subcategory,
@@ -40,11 +42,19 @@ export interface ItemFormHandle {
   save: () => Promise<void>;
 }
 
-export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; defaultCategory?: Category; onDone: () => void }>(function ItemForm({ item, defaultCategory, onDone }, ref) {
+export const ItemForm = forwardRef<ItemFormHandle, {
+  item?: ClosetItem;
+  defaultCategory?: Category;
+  /** Name typed before switching here from the General form. */
+  initialName?: string;
+  /** New items can be switched to "general"; the parent swaps in the general-item form. */
+  onKindChange?: (kind: 'general', name: string) => void;
+  onDone: () => void;
+}>(function ItemForm({ item, defaultCategory, initialName, onKindChange, onDone }, ref) {
   const [draft, setDraft] = useState<Draft>(() => {
-    if (!item) return defaultCategory ? { ...EMPTY, category: defaultCategory } : EMPTY;
-    const { name, category, color, warmth, formality, weatherTags, activities, photo, quantity = 1, wearCount = 1, favorite = 0, customTags = [], subcategory, unlimitedWear } = item;
-    return { name, category, color, warmth, formality, weatherTags, activities, photo, quantity, wearCount, favorite, customTags, subcategory, unlimitedWear };
+    if (!item) return { ...EMPTY, ...(defaultCategory ? { category: defaultCategory } : {}), name: initialName ?? '' };
+    const { name, category, color, warmth, formality, weatherTags, activities, photo, quantity = 1, wearCount = 1, favorite = 0, customTags = [], subcategory, unlimitedWear, accessoryType, size, material, notes } = item;
+    return { name, category, color, warmth, formality, weatherTags, activities, photo, quantity, wearCount, favorite, customTags, subcategory, unlimitedWear, accessoryType, size, material, notes };
   });
   // Track whether the user explicitly changed the photo so we never accidentally
   // overwrite the stored Blob with undefined when photo wasn't touched.
@@ -66,6 +76,10 @@ export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; defaultC
       customTags: cleanTags(rest.customTags),
       subcategory: rest.subcategory ?? undefined,
       unlimitedWear: rest.unlimitedWear ?? undefined,
+      accessoryType: rest.category === 'accessory' ? rest.accessoryType : undefined,
+      size: rest.size?.trim() || undefined,
+      material: rest.material?.trim() || undefined,
+      notes: rest.notes?.trim() || undefined,
     };
     if (item?.id != null) {
       // Only include photo in the update when explicitly changed; spreading
@@ -99,18 +113,34 @@ export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; defaultC
         <Field label="Category">
           <select className={inputClass} value={draft.category}
             onChange={(e) => {
+              if (e.target.value === 'general') {
+                onKindChange?.('general', draft.name);
+                return;
+              }
               set('category', e.target.value as Draft['category']);
+              if (e.target.value !== 'accessory') set('accessoryType', undefined);
               const allowed = subcategoriesFor(e.target.value as Draft['category']);
               if (draft.subcategory && !allowed.includes(draft.subcategory)) set('subcategory', undefined);
             }}>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
+            {!item && onKindChange && <option value="general">general</option>}
           </select>
         </Field>
         <Field label="Color">
           <input className={inputClass} value={draft.color} onChange={(e) => set('color', e.target.value)} placeholder="e.g. navy" />
         </Field>
+        {draft.category === 'accessory' && (
+          <Field label="Accessory type">
+            <select className={inputClass} value={draft.accessoryType ?? ''} onChange={(e) => set('accessoryType', (e.target.value as AccessoryType) || undefined)}>
+              <option value="">— Select type —</option>
+              {ACCESSORY_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </Field>
+        )}
         {subcategoriesFor(draft.category).length > 0 && (
           <Field label="Type">
             <select className={inputClass} value={draft.subcategory ?? ''}
@@ -122,16 +152,23 @@ export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; defaultC
             </select>
           </Field>
         )}
-        <Field label={`Warmth: ${draft.warmth} (${WARMTH_LABELS[draft.warmth]})`}>
-          <input
-            type="range"
-            min={1}
-            max={5}
-            value={draft.warmth}
-            onChange={(e) => set('warmth', Number(e.target.value) as WarmthLevel)}
-            className="w-full accent-teal-700"
-          />
-        </Field>
+        <div>
+          <Field label={draft.warmth === 0 ? 'Warmth: not applicable' : `Warmth: ${draft.warmth} (${WARMTH_LABELS[draft.warmth]})`}>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              value={draft.warmth || 3}
+              disabled={draft.warmth === 0}
+              onChange={(e) => set('warmth', Number(e.target.value) as WarmthLevel)}
+              className="w-full accent-teal-700 disabled:opacity-40"
+            />
+          </Field>
+          <label className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
+            <input type="checkbox" className="h-3.5 w-3.5 accent-teal-700" checked={draft.warmth === 0} onChange={(e) => set('warmth', (e.target.checked ? 0 : 3) as WarmthLevel)} />
+            None / not applicable
+          </label>
+        </div>
         <Field label="Formality">
           <select className={inputClass} value={draft.formality} onChange={(e) => set('formality', e.target.value as Draft['formality'])}>
             {FORMALITIES.map((f) => (
@@ -176,6 +213,20 @@ export const ItemForm = forwardRef<ItemFormHandle, { item?: ClosetItem; defaultC
       <Field label="Good for">
         <ChipGroup label="Activities" options={ACTIVITIES} value={draft.activities} onChange={(v) => set('activities', v)} />
       </Field>
+      <fieldset className="space-y-3 rounded-lg border border-slate-200 p-3">
+        <legend className="px-1 text-sm font-medium text-slate-700">Details <span className="font-normal text-slate-400">(optional)</span></legend>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Size">
+            <input className={inputClass} value={draft.size ?? ''} onChange={(e) => set('size', e.target.value)} placeholder="e.g. M, 10, 32x30" />
+          </Field>
+          <Field label="Material">
+            <input className={inputClass} value={draft.material ?? ''} onChange={(e) => set('material', e.target.value)} placeholder="e.g. cotton, wool" />
+          </Field>
+        </div>
+        <Field label="Notes">
+          <textarea className={`${inputClass} resize-none`} rows={2} value={draft.notes ?? ''} onChange={(e) => set('notes', e.target.value)} />
+        </Field>
+      </fieldset>
       <div>
         <span className="mb-1 block text-sm font-medium text-slate-700">Custom tags</span>
         <TagInput value={draft.customTags} onChange={(v) => set('customTags', v)} suggestions={knownTags} />

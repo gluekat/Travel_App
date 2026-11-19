@@ -130,7 +130,8 @@ export function scoreItem(item: EngineItem, ctx: ScoreContext): number {
   const { needs, slot } = ctx;
 
   // Warmth fit.
-  if (needs) {
+  // Items with no warmth factor (warmth 0) are neutral for temperature.
+  if (needs && item.warmth > 0) {
     if (slot === 'outerwear') {
       if (needs.outerwearMin != null) {
         s += item.warmth >= needs.outerwearMin ? 3 - (item.warmth - needs.outerwearMin) * 0.5 : -3 * (needs.outerwearMin - item.warmth);
@@ -140,6 +141,8 @@ export function scoreItem(item: EngineItem, ctx: ScoreContext): number {
     } else if (slot !== 'accessory' && slot !== 'swimwear') {
       s -= Math.abs(item.warmth - needs.coreWarmth) * 1.5;
     }
+  }
+  if (needs) {
     const hotish = needs.band === 'hot' || needs.band === 'warm';
     const coldish = needs.band === 'cold' || needs.band === 'freezing' || needs.band === 'cool';
     if (item.weatherTags.includes('hot')) s += hotish ? 1 : coldish ? -2 : 0;
