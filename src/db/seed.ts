@@ -66,6 +66,6 @@ export async function seedIfFirstRun(): Promise<void> {
 
 export async function clearSampleItems(): Promise<number> {
   const ids = (await db.closetItems.filter((i) => i.isSample).primaryKeys()) as number[];
-  for (const id of ids) await deleteClosetItem(id);
+  for (const id of ids) await deleteClosetItem(id, false);
   return ids.length;
 }

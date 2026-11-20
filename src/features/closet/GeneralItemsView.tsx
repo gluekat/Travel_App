@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/schema';
-import { GENERAL_CATEGORIES, compareGeneral, generalCategory, type GeneralItem } from '../../db/types';
+import { db, deleteGeneralItem } from '../../db/schema';
+import { GENERAL_CATEGORIES, TRASH_DAYS, compareGeneral, generalCategory, type GeneralItem } from '../../db/types';
 import { Button, Chip, Icon, Modal, inputClass } from '../../components/ui';
 import { ensureGeneralLibrary } from '../packing/generalItemsService';
 import { GeneralIcon, isActivity } from './GeneralItemForm';
@@ -43,8 +43,8 @@ export function GeneralItemCard({ item, onEdit, onDelete, onTag }: { item: Gener
   );
 }
 
-export async function deleteGeneralItem(item: GeneralItem) {
-  if (confirm(`Delete "${item.name}" from your general items?`)) await db.generalItems.delete(item.id!);
+export async function confirmDeleteGeneralItem(item: GeneralItem) {
+  if (confirm(`Delete "${item.name}" from your general items? You can restore it from the Trash for ${TRASH_DAYS} days.`)) await deleteGeneralItem(item.id!);
 }
 
 /** Add/edit modal for any item; closing an existing item with X saves it. */
@@ -124,7 +124,7 @@ export function GeneralItemsView() {
           )}
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {list.map((item) => (
-              <GeneralItemCard key={item.id} item={item} onEdit={() => setEditing({ kind: 'general', item })} onDelete={() => void deleteGeneralItem(item)} onTag={setTag} />
+              <GeneralItemCard key={item.id} item={item} onEdit={() => setEditing({ kind: 'general', item })} onDelete={() => void confirmDeleteGeneralItem(item)} onTag={setTag} />
             ))}
           </ul>
         </section>

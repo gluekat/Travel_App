@@ -84,7 +84,9 @@ export async function importDatabase(data: unknown): Promise<void> {
   const decoded: Tables = {};
   for (const name of TABLE_NAMES) decoded[name] = ((data.tables[name] ?? []) as Record<string, unknown>[]).map(decodeRow);
   const tables = migrateTables(decoded, data.version);
-  await db.transaction('rw', TABLE_NAMES.map((n) => db.table(n)), async () => {
+  await db.transaction('rw', [...TABLE_NAMES.map((n) => db.table(n)), db.trash], async () => {
+    // The trash isn't part of a backup; its ids would no longer match the restored data.
+    await db.trash.clear();
     for (const name of TABLE_NAMES) {
       const table = db.table(name);
       await table.clear();

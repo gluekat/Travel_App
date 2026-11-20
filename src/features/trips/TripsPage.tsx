@@ -179,7 +179,7 @@ function TripSection({ title, trips, today }: { title: string; trips: Trip[]; to
             key={t.id}
             trip={t}
             onDelete={() => {
-              if (confirm(`Delete "${tripLabel(t)}" and its outfits and packing checklist?`)) {
+              if (confirm(`Delete "${tripLabel(t)}" and its outfits and packing checklist? You can restore it from the Trash for 30 days.`)) {
                 void deleteTrip(t.id!);
               }
             }}
