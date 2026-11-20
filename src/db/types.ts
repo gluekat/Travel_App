@@ -2,6 +2,7 @@ export const CATEGORIES = [
   'top',
   'bottom',
   'dress',
+  'one-piece',
   'outerwear',
   'shoes',
   'accessory',
@@ -15,7 +16,7 @@ export type Category = (typeof CATEGORIES)[number];
 export const FORMALITIES = ['casual', 'smart casual', 'formal'] as const;
 export type Formality = (typeof FORMALITIES)[number];
 
-export const WEATHER_TAGS = ['rain-ready', 'sun', 'cold', 'hot'] as const;
+export const WEATHER_TAGS = ['rain-ready', 'sun', 'hot', 'warm', 'mild', 'cool', 'chilly', 'cold', 'snow', 'windy'] as const;
 export type WeatherTag = (typeof WEATHER_TAGS)[number];
 
 export const ACTIVITIES = [
@@ -24,6 +25,7 @@ export const ACTIVITIES = [
   'beach',
   'dinner out',
   'business',
+  'work',
   'travel day',
   'nightlife',
   'workout',
@@ -94,9 +96,11 @@ export interface TripStop {
 }
 
 export interface TripNotes {
-  /** Free-text general weather summary, e.g. "Hot and humid, afternoon thunderstorms". */
+  /** The single free-text note (replaces the separate weather and packing notes below). */
+  general?: string;
+  /** @deprecated Older notes: shown together in `general` and cleared when it is saved. */
   weather?: string;
-  /** Free-text packing reminders, e.g. "Bring a rain jacket; smart dress code for restaurants". */
+  /** @deprecated See `weather`. */
   packingAlerts?: string;
 }
 

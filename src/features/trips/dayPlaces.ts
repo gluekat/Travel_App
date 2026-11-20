@@ -106,7 +106,7 @@ export function computeDayPlaces(trip: Trip, days: TripDay[], legs: TransportLeg
 export function weatherNeedsPlaceRefresh(day: TripDay, trip: Trip, places: Map<string, DayPlace>): boolean {
   if (!day.weather || day.weather.source === 'manual') return false;
   const from = places.get(day.date)?.from;
-  if (from && day.weatherFrom?.placeKey !== placeKey(from.lat, from.lon)) return true;
+  if (from && day.weatherFrom?.source !== 'manual' && day.weatherFrom?.placeKey !== placeKey(from.lat, from.lon)) return true;
   const want = placeKey(places.get(day.date)?.lat, places.get(day.date)?.lon);
   if (!want) return false;
   const base = baseDayPlace(trip, day.date);

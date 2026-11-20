@@ -9,6 +9,7 @@ const SAMPLE_WEARS: Record<ClosetItem['category'], number> = {
   top: 1,
   bottom: 3,
   dress: 1,
+  'one-piece': 1,
   outerwear: 10,
   shoes: 10,
   accessory: 10,

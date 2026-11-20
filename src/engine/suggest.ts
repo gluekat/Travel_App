@@ -228,7 +228,7 @@ export function explainOutfit(
 
   const formality = requiredFormality(group.activities);
   const suited = chosen.filter((i) => i.activities.some((a) => group.activities.includes(a)));
-  if (FORMALITY_RANK[formality] > 0) parts.push(`${capitalize(formality)} enough for ${group.activities.filter((a) => ['business', 'dinner out', 'nightlife'].includes(a)).join(' and ')}.`);
+  if (FORMALITY_RANK[formality] > 0) parts.push(`${capitalize(formality)} enough for ${group.activities.filter((a) => ['business', 'work', 'dinner out', 'nightlife'].includes(a)).join(' and ')}.`);
   else if (suited.length) parts.push(`Picked for ${group.activities.join(', ')}.`);
 
   const favorites = chosen.filter((i) => (i.favorite ?? 0) >= 4);
@@ -279,7 +279,7 @@ export function detectGaps(
   if (FORMALITY_RANK[req] > 0) {
     const enough = (cat: string[]) => items.some((i) => cat.includes(i.category) && FORMALITY_RANK[i.formality] >= FORMALITY_RANK[req]);
     if (!enough(['top', 'dress']) || !enough(['bottom', 'dress']) || !enough(['shoes'])) {
-      gaps.push(`Not enough ${req} pieces for ${acts.filter((a) => ['business', 'dinner out', 'nightlife'].includes(a)).join(' and ')} on ${label}.`);
+      gaps.push(`Not enough ${req} pieces for ${acts.filter((a) => ['business', 'work', 'dinner out', 'nightlife'].includes(a)).join(' and ')} on ${label}.`);
     }
   }
   if (acts.includes('hiking') && !items.some((i) => i.category === 'shoes' && i.activities.includes('hiking'))) {

@@ -27,7 +27,7 @@ export function SourceBadge({ weather }: { weather: DayWeather }) {
   );
 }
 
-function ManualWeatherForm({ dayId, unit, initial, onDone }: { dayId: number; unit: TempUnit; initial?: DayWeather; onDone?: () => void }) {
+function ManualWeatherForm({ dayId, unit, initial, field, onDone }: { dayId: number; unit: TempUnit; initial?: DayWeather; field: 'weather' | 'weatherFrom'; onDone?: () => void }) {
   const toUnit = (c: number) => Math.round(unit === 'F' ? cToF(c) : c);
   const [high, setHigh] = useState(initial ? String(toUnit(initial.high)) : '');
   const [low, setLow] = useState(initial ? String(toUnit(initial.low)) : '');
@@ -42,7 +42,7 @@ function ManualWeatherForm({ dayId, unit, initial, onDone }: { dayId: number; un
       high: toC(Math.max(h, l)),
       low: toC(Math.min(h, l)),
       precipChance: Math.min(100, Math.max(0, Number(rain) || 0)),
-    });
+    }, field);
     onDone?.();
   }
 
@@ -68,18 +68,24 @@ function ManualWeatherForm({ dayId, unit, initial, onDone }: { dayId: number; un
   );
 }
 
-export function WeatherSummary({ dayId, weather, unit }: { dayId: number; weather?: DayWeather; unit: TempUnit }) {
+/**
+ * A day's weather with its source ("Live forecast", "Historical average", …) and an edit link.
+ * `field`/`label` let a travel day show and edit the weather for each of its places.
+ */
+export function WeatherSummary({ dayId, weather, unit, field = 'weather', label }: { dayId: number; weather?: DayWeather; unit: TempUnit; field?: 'weather' | 'weatherFrom'; label?: string }) {
   const [editing, setEditing] = useState(false);
   if (!weather || editing) {
     return (
       <div className="space-y-1.5 rounded-lg bg-slate-50 p-2">
-        {!weather && <p className="text-xs text-slate-600">No weather data for this day. Enter it manually:</p>}
-        <ManualWeatherForm dayId={dayId} unit={unit} initial={weather} onDone={weather ? () => setEditing(false) : undefined} />
+        {label && <p className="text-xs font-semibold text-teal-800">{label}</p>}
+        {!weather && <p className="text-xs text-slate-600">No weather data{label ? ` for ${label}` : ' for this day'}. Enter it manually:</p>}
+        <ManualWeatherForm dayId={dayId} unit={unit} initial={weather} field={field} onDone={weather ? () => setEditing(false) : undefined} />
       </div>
     );
   }
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      {label && <span className="font-semibold text-teal-800">{label}</span>}
       <span className="text-xl" aria-hidden="true">
         {codeEmoji(weather.code)}
       </span>
@@ -89,7 +95,7 @@ export function WeatherSummary({ dayId, weather, unit }: { dayId: number; weathe
       <span className="text-slate-600">💧 {Math.round(weather.precipChance)}%</span>
       <span className="text-slate-600">{weather.condition}</span>
       <SourceBadge weather={weather} />
-      <button className="text-xs text-slate-500 underline" onClick={() => setEditing(true)}>
+      <button className="text-xs text-slate-500 underline" onClick={() => setEditing(true)} aria-label={label ? `Edit weather for ${label}` : 'Edit weather'}>
         edit
       </button>
     </div>
@@ -107,6 +113,7 @@ export function WeatherLine({ weather, unit, label }: { weather: DayWeather; uni
       </span>
       <span className="text-slate-600">💧 {Math.round(weather.precipChance)}%</span>
       <span className="text-slate-600">{weather.condition}</span>
+      <SourceBadge weather={weather} />
     </div>
   );
 }

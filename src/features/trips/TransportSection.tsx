@@ -337,20 +337,14 @@ function LabeledBox({ label, children }: { label: string; children: ReactNode })
 }
 
 function DateTimeBox({ label, date, time, dateRequired, onDate, onTime }: { label: string; date: string; time: string; dateRequired?: boolean; onDate: (v: string) => void; onTime: (v: string) => void }) {
-  // Wraps (rather than overlaps) when the dialog is narrow; the time picker keeps its own space to the right of the date.
+  // Same layout as the lodging form's check-in / check-out: the date takes the free width and the time wraps below it rather than overlapping.
   return (
-    <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
-      <div className="min-w-[11rem] flex-1">
-        <LabeledBox label={`${label} date`}>
-          <input type="date" className={`${inputClass} min-w-0`} value={date} onChange={(e) => onDate(e.target.value)} required={dateRequired} aria-label={`${label} date`} />
-        </LabeledBox>
+    <Field label={`${label} date & time`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="date" className={`${inputClass} min-w-[8rem] flex-1`} value={date} onChange={(e) => onDate(e.target.value)} required={dateRequired} aria-label={`${label} date`} />
+        <TimeInput value={time} onChange={onTime} />
       </div>
-      <div className="shrink-0">
-        <LabeledBox label={`${label} time`}>
-          <TimeInput value={time} onChange={onTime} />
-        </LabeledBox>
-      </div>
-    </div>
+    </Field>
   );
 }
 
