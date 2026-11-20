@@ -6,6 +6,7 @@ import { airportByCode, airportLabel, nearestAirport } from '../../lib/airports'
 import { Banner, Button, Field, Icon, Modal, inputClass } from '../../components/ui';
 import { TimeInput } from '../../components/TimeInput';
 import { LocationInput } from '../../components/LocationInput';
+import { placeName } from './dayPlaces';
 import { cruiseRanges, directionSegments, directionTotalMinutes, driveEstimate, formatMinutes, mirrorLeg, transportOverview, type Segment } from './transportPlan';
 
 const MODE_ICON: Record<TransportMode, string> = { drive: '🚗', fly: '✈️', train: '🚂', boat: '🛳️' };
@@ -334,6 +335,18 @@ function draftToLeg(d: Draft, tripId: number, existing?: TransportLeg): Omit<Tra
   };
 }
 
+const isAirportLabel = (label: string) => /^[A-Z]{3} – /.test(label);
+
+/** Airport → its city for ground and sea travel; city → nearest airport when switching back to flying. */
+function convertEnd(p: Point, mode: TransportMode): Point {
+  if (mode !== 'fly') return isAirportLabel(p.label) ? { ...p, label: placeName(p.label) } : p;
+  if (!isAirportLabel(p.label) && p.lat != null && p.lon != null) {
+    const a = nearestAirport(p.lat, p.lon);
+    if (a) return { label: airportLabel(a), lat: a.lat, lon: a.lon };
+  }
+  return p;
+}
+
 function LabeledBox({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
@@ -399,11 +412,13 @@ function TransportFormModal({ tripId, trip, home, homeAirport, existing, default
 
   function changeMode(mode: TransportMode) {
     const ends = defaultEnds(draft.direction, mode, trip, home, homeAirport);
+    // Untouched endpoints re-suggest for the new mode (an airport for flights, an address otherwise). A placeholder's
+    // endpoints (which can be any hop of the trip) switch between airports and cities instead.
+    const placeholder = !!existing?.placeholder;
     set({
       mode,
-      // Untouched endpoints re-suggest for the new mode (an airport for flights, an address otherwise).
-      ...(touched.from ? {} : { from: ends.from }),
-      ...(touched.to ? {} : { to: ends.to }),
+      ...(touched.from ? (placeholder ? { from: convertEnd(draft.from, mode) } : {}) : { from: ends.from }),
+      ...(touched.to ? (placeholder ? { to: convertEnd(draft.to, mode) } : {}) : { to: ends.to }),
       stops: draft.stops.map((s) => ({ ...s, carrier: mode === 'fly' || mode === 'train' ? s.carrier : '', identifier: mode === 'fly' || mode === 'train' ? s.identifier : '' })),
     });
   }

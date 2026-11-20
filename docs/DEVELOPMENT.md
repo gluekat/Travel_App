@@ -489,7 +489,7 @@ Repository setting: *Settings → Pages → Source = GitHub Actions*. With "Depl
 | `src/features/trash/trash.test.ts` | 4 | Trip and closet-item restore, general items, 30-day expiry, samples bypass the trash |
 | `src/lib/emoji.test.ts` | 1 | Emoji suggestions |
 | `src/features/trips/placeholders.test.ts` | 3 | Placeholder hops for single / multi-stop trips, regeneration after editing stops, real bookings untouched |
-| **Total** | **112** | All passing |
+| **Total** | **114** | All passing |
 
 The network is always mocked; no test calls Open-Meteo.
 

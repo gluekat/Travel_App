@@ -36,8 +36,12 @@ describe('closet scopes', () => {
     expect(matchesFilters(charger, { ...none, favoritesOnly: true })).toBe(false);
   });
 
-  it('sorts items without warmth last and groups by category / accessory type', () => {
-    expect(sortEntries([hat, tee], 'warmth').map((e) => e.item.name)).toEqual(['Tee', 'Sun hat']);
+  it('sorts ascending first and reverses on request and groups by category / accessory type', () => {
+    expect(sortEntries([hat, tee], 'warmth', 'desc').map((e) => e.item.name)).toEqual(['Tee', 'Sun hat']);
+    expect(sortEntries([hat, tee], 'warmth', 'asc').map((e) => e.item.name)).toEqual(['Sun hat', 'Tee']);
+    const names = [tee, sneakers, hat];
+    expect(sortEntries(names, 'name').map((e) => e.item.name)).toEqual(['Sneakers', 'Sun hat', 'Tee']);
+    expect(sortEntries(names, 'name', 'desc').map((e) => e.item.name)).toEqual(['Tee', 'Sun hat', 'Sneakers']);
     const groups = groupEntries([charger, hat, tee, sneakers], 'category');
     expect(groups.map((g) => g.label)).toEqual(['top', 'shoes', 'accessory', 'general']);
     const scarf = closet({ name: 'Scarf', category: 'accessory', accessoryType: 'scarf' });

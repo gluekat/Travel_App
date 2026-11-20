@@ -5,7 +5,7 @@ import type { ClosetItem, SavedOutfit } from '../../db/types';
 import { ClosetPicker } from '../../components/ClosetPicker';
 import { ItemThumb } from '../../components/ItemThumb';
 import { Button, Chip, Icon } from '../../components/ui';
-import { deleteSavedOutfit, saveOutfitToCloset, updateSavedOutfit } from './savedOutfitService';
+import { deleteSavedOutfit, duplicateSavedOutfit, saveOutfitToCloset, updateSavedOutfit } from './savedOutfitService';
 
 function SavedOutfitCard({ outfit, closet }: { outfit: SavedOutfit; closet: Map<number, ClosetItem> }) {
   const [name, setName] = useState(outfit.name);
@@ -32,6 +32,14 @@ function SavedOutfitCard({ outfit, closet }: { outfit: SavedOutfit; closet: Map<
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           aria-label="Outfit name"
         />
+        <button
+          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          onClick={() => void duplicateSavedOutfit(outfit.id!)}
+          aria-label={`Duplicate ${outfit.name}`}
+          title="Duplicate"
+        >
+          <Icon name="copy" />
+        </button>
         <button
           className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700"
           onClick={() => confirm(`Delete saved outfit "${outfit.name}"? You can restore it from the Trash for 30 days.`) && deleteSavedOutfit(outfit.id!)}
@@ -67,6 +75,7 @@ function SavedOutfitCard({ outfit, closet }: { outfit: SavedOutfit; closet: Map<
           title={`Add items to ${outfit.name}`}
           closet={[...closet.values()]}
           excludeIds={outfit.itemIds}
+          alreadyIn={outfit.itemIds}
           onPick={(ids) => updateSavedOutfit(outfit.id!, { itemIds: [...outfit.itemIds, ...ids] })}
           onClose={() => setAdding(false)}
         />
@@ -111,6 +120,7 @@ export function SavedOutfitsView() {
         <ClosetPicker
           title="New outfit: pick its items"
           closet={[...closet.values()]}
+          showSelected
           confirmLabel={(n) => `Create outfit${n ? ` (${n} items)` : ''}`}
           onPick={async (ids) => {
             const name = prompt('Name this outfit:', 'My outfit');

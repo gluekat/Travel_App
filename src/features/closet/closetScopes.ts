@@ -55,26 +55,42 @@ export function matchesFilters(e: Entry, f: Filters): boolean {
 
 export type SortKey = 'default' | 'name' | 'category' | 'favorite' | 'warmth' | 'formality' | 'weather' | 'activity' | 'customtags';
 
+export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'default', label: 'Date added' },
+  { key: 'name', label: 'Name' },
+  { key: 'category', label: 'Category' },
+  { key: 'favorite', label: 'Favorite' },
+  { key: 'warmth', label: 'Warmth' },
+  { key: 'formality', label: 'Formality' },
+  { key: 'weather', label: 'Weather tags' },
+  { key: 'activity', label: 'Activity tags' },
+  { key: 'customtags', label: 'Custom tags' },
+];
+
 const FORMALITY: Record<string, number> = { casual: 0, 'smart casual': 1, formal: 2 };
 const CATEGORY_ORDER = [...CATEGORIES, 'general'] as string[];
 const name = (e: Entry) => e.item.name;
 const updated = (e: Entry) => (e.kind === 'closet' ? e.item.updatedAt : e.item.createdAt);
 
-export function sortEntries(entries: Entry[], sort: SortKey): Entry[] {
-  const out = [...entries];
+/**
+ * Sorted copy. "asc" is the natural ascending order (A→Z, fewest to most, casual → formal, oldest first,
+ * items with no warmth first); "desc" is exactly the reverse.
+ */
+export function sortEntries(entries: Entry[], sort: SortKey, dir: 'asc' | 'desc' = 'asc'): Entry[] {
+  const warmth = (e: Entry) => (e.kind === 'closet' && e.item.warmth > 0 ? e.item.warmth : 0);
   const cmp: Record<SortKey, (a: Entry, b: Entry) => number> = {
-    default: (a, b) => updated(b) - updated(a),
+    default: (a, b) => updated(a) - updated(b),
     name: (a, b) => name(a).localeCompare(name(b)),
-    category: (a, b) => CATEGORY_ORDER.indexOf(effectiveCategory(a)) - CATEGORY_ORDER.indexOf(effectiveCategory(b)) || name(a).localeCompare(name(b)),
-    favorite: (a, b) => (b.kind === 'closet' ? b.item.favorite ?? 0 : 0) - (a.kind === 'closet' ? a.item.favorite ?? 0 : 0),
-    // Items without a warmth factor sort last.
-    warmth: (a, b) => (b.kind === 'closet' && b.item.warmth > 0 ? b.item.warmth : -1) - (a.kind === 'closet' && a.item.warmth > 0 ? a.item.warmth : -1),
+    category: (a, b) => CATEGORY_ORDER.indexOf(effectiveCategory(a)) - CATEGORY_ORDER.indexOf(effectiveCategory(b)),
+    favorite: (a, b) => (a.kind === 'closet' ? a.item.favorite ?? 0 : 0) - (b.kind === 'closet' ? b.item.favorite ?? 0 : 0),
+    warmth: (a, b) => warmth(a) - warmth(b),
     formality: (a, b) => (a.kind === 'closet' ? FORMALITY[a.item.formality] ?? 0 : 3) - (b.kind === 'closet' ? FORMALITY[b.item.formality] ?? 0 : 3),
-    weather: (a, b) => (b.kind === 'closet' ? b.item.weatherTags.length : 0) - (a.kind === 'closet' ? a.item.weatherTags.length : 0),
-    activity: (a, b) => (b.kind === 'closet' ? b.item.activities.length : 0) - (a.kind === 'closet' ? a.item.activities.length : 0),
-    customtags: (a, b) => entryCustomTags(b).length - entryCustomTags(a).length,
+    weather: (a, b) => (a.kind === 'closet' ? a.item.weatherTags.length : 0) - (b.kind === 'closet' ? b.item.weatherTags.length : 0),
+    activity: (a, b) => (a.kind === 'closet' ? a.item.activities.length : 0) - (b.kind === 'closet' ? b.item.activities.length : 0),
+    customtags: (a, b) => entryCustomTags(a).length - entryCustomTags(b).length,
   };
-  return sort === 'default' ? out.sort(cmp.default) : out.sort((a, b) => cmp[sort](a, b) || name(a).localeCompare(name(b)));
+  const asc = [...entries].sort((a, b) => cmp[sort](a, b) || name(a).localeCompare(name(b)) || (a.item.id ?? 0) - (b.item.id ?? 0));
+  return dir === 'asc' ? asc : asc.reverse();
 }
 
 export type GroupBy = 'none' | 'category' | 'type';

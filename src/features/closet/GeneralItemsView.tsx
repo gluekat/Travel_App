@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteGeneralItem } from '../../db/schema';
 import { GENERAL_CATEGORIES, TRASH_DAYS, compareGeneral, generalCategory, type GeneralItem } from '../../db/types';
-import { Button, Chip, Icon, Modal, inputClass } from '../../components/ui';
+import { Button, Chip, Icon, Modal } from '../../components/ui';
+import { SortBar, type SortDir } from '../../components/SortBar';
 import { ensureGeneralLibrary } from '../packing/generalItemsService';
 import { GeneralIcon, isActivity } from './GeneralItemForm';
 import { ItemEditor, type EditorTarget } from './ItemEditor';
@@ -67,16 +68,19 @@ export function GeneralItemsView() {
   const items = useLiveQuery(async () => (await db.generalItems.toArray()).sort((a, b) => a.name.localeCompare(b.name)), []);
   const [tag, setTag] = useState<string | null>(null);
   const [sort, setSort] = useState<'name' | 'category'>('category');
+  const [dir, setDir] = useState<SortDir>('asc');
   const [editing, setEditing] = useState<EditorTarget | null>(null);
 
   const allTags = useMemo(() => [...new Set((items ?? []).flatMap((i) => i.tags))].sort(), [items]);
   const visible = (items ?? [])
     .filter((i) => !tag || (tag === 'default' ? i.isDefault : i.tags.includes(tag)))
     .sort((a, b) => (sort === 'category' ? compareGeneral({ category: generalCategory(a), name: a.name }, { category: generalCategory(b), name: b.name }) : a.name.localeCompare(b.name)));
+  if (dir === 'desc') visible.reverse();
   const groups: [string | null, GeneralItem[]][] =
     sort === 'category'
       ? GENERAL_CATEGORIES.map((c) => [c, visible.filter((i) => generalCategory(i) === c)] as [string, GeneralItem[]]).filter(([, list]) => list.length > 0)
       : [[null, visible]];
+  if (sort === 'category' && dir === 'desc') groups.reverse();
 
   return (
     <div className="space-y-4">
@@ -91,10 +95,7 @@ export function GeneralItemsView() {
 
       {(items?.length ?? 0) > 0 && (
         <div className="flex flex-wrap items-center gap-1.5" aria-label="Filter by tag">
-          <select className={`${inputClass} !w-auto`} value={sort} onChange={(e) => setSort(e.target.value as 'name' | 'category')} aria-label="Sort by">
-            <option value="category">Sort: Category</option>
-            <option value="name">Sort: Name A→Z</option>
-          </select>
+          <SortBar options={[{ key: 'category' as const, label: 'Category' }, { key: 'name' as const, label: 'Name' }]} value={sort} dir={dir} onChange={(k, d) => { setSort(k); setDir(d); }} />
           <Chip active={tag === null} onClick={() => setTag(null)}>
             all
           </Chip>

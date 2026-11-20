@@ -66,6 +66,16 @@ describe('trash', () => {
     expect(await db.trash.count()).toBe(0);
   });
 
+  it('duplicates a saved outfit with a copy name and the same items', async () => {
+    const { duplicateSavedOutfit } = await import('../closet/savedOutfitService');
+    const a = (await db.closetItems.add({ ...item, name: 'A' })) as number;
+    const id = (await db.savedOutfits.add({ name: 'Look', itemIds: [a], favorite: true, createdAt: 1, updatedAt: 1 })) as number;
+    const copy = (await duplicateSavedOutfit(id))!;
+    expect(copy).not.toBe(id);
+    expect(await db.savedOutfits.get(copy)).toMatchObject({ name: 'Look (duplicate)', itemIds: [a], favorite: true });
+    expect(await db.savedOutfits.count()).toBe(2);
+  });
+
   it('keeps general items, expires after 30 days, and clearing samples bypasses the trash', async () => {
     const gid = (await db.generalItems.add({ name: 'Charger', isDefault: false, tags: [], createdAt: 1 })) as number;
     await deleteGeneralItem(gid);

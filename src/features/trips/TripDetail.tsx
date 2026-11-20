@@ -24,8 +24,9 @@ import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace, setTripStops 
 import { refreshPlaceholders } from './placeholders';
 
 function TripNotesSection({ trip }: { trip: Trip }) {
-  // Older trips kept separate weather and packing notes; show them together in the one field.
-  const [note, setNote] = useState(trip.notes?.general ?? [trip.notes?.weather, trip.notes?.packingAlerts].filter(Boolean).join('\n'));
+  const [note, setNote] = useState(trip.notes?.general ?? '');
+  // Older trips kept separate weather and packing notes; offer them rather than filling the box.
+  const earlier = note ? '' : [trip.notes?.weather, trip.notes?.packingAlerts].filter(Boolean).join('\n');
 
   async function save() {
     const trimmed = note.trim();
@@ -45,6 +46,14 @@ function TripNotesSection({ trip }: { trip: Trip }) {
         onChange={(e) => setNote(e.target.value)}
         onBlur={() => void save()}
       />
+      {earlier && (
+        <p className="mt-1 text-xs text-slate-500">
+          Earlier notes: “{earlier.replace(/\n/g, ' · ')}”{' '}
+          <button type="button" className="underline" onClick={() => setNote(earlier)}>
+            Use as the note
+          </button>
+        </p>
+      )}
     </div>
   );
 }
