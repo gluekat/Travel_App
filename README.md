@@ -3,16 +3,20 @@
 PackWise is a local-first travel app that picks and packs outfits for a trip from **your own closet**, based on the forecast and what you plan to do each day.
 
 - **Closet:** enter your wardrobe once, with photos, warmth, formality, weather tags, the activities each item suits, **how many identical copies you own** (e.g. white socks ×5), **how many wears each copy lasts before washing** (default 1), a **favorite score** (0–5 ★) and your own **custom tags** (e.g. #packable). Filter by category, tag, custom tag or favorites.
+  The Closet has tabs for **Items** (everything), **Clothing**, **Shoes**, **Accessories** (with types such as hat or scarf), **General** packing items and **Outfits**. Items also hold size, material, notes and an optional "no warmth" setting.
 - **Saved outfits:** the Closet's **Outfits** tab stores outfits you like for future trips. Create them there or use **Save to closet** on any trip outfit, and star your favorites.
 - **Trips:** set a destination and dates, then pick activities for each day. Weather comes from Open-Meteo.
 - **Outfits:** each day shows its weather and the outfit(s) you chose. Build them by hand (add, swap, lock or remove items), add as many outfits per day as you like (e.g. "Hiking", "Dinner"), and press **Suggest outfit** when you want ideas: you get two fresh options plus your best-fitting saved outfits (favorites first), each with a short "why" and any gaps (e.g. *"No rain-ready outerwear for Day 3"*). **Suggest outfits for empty days** fills every day you haven't planned yet.
-- **Trip tabs:** each trip has a **Trip Overview** (days, weather, outfits; the default) and a **Packing Checklist** tab.
-- **Packing Checklist:** general items for the whole trip (Underwear and Socks at 1 per day, Jacket, Toiletries, plus your own), then clothes grouped by category with the number of copies to pack. Checkboxes persist, and there's a mix-and-match stat and a print view.
+- **Trip tabs:** each trip has a **Trip Overview** (days, weather, outfits; the default), a **Packing Checklist**, an **Itinerary** (transportation with layovers and drive times, lodging, scheduled activities) and a **Closet** tab for browsing your clothes without leaving the trip. Day locations and weather follow your transportation, and travel days show weather for both places.
+- **Laundry and wear counts:** plan laundry days; each outfit item shows which wear it is ("wear 2 of 3") and warns on the day it runs out.
+- **Trash:** deleted trips and closet items are kept for 30 days and can be restored.
+- **Packing Checklist:** general items for the whole trip (your **Default**-tagged items such as Underwear and Socks at 1 per day, Jacket and Toiletries, plus others you add, sorted by category), laundry and wear warnings, then clothes grouped by category with the number of copies to pack. Checkboxes persist, and there's a mix-and-match stat and a print view.
 - **Works offline:** it installs as a PWA, and everything is stored in your browser.
 
 ## Documentation
 
 - **[User Manual](docs/USER_MANUAL.md)**: how to use PackWise, for end users.
+- **[Summary of recent changes](docs/CHANGES.md)**: a brief overview of the November 2026 updates.
 - **[Development Documentation](docs/DEVELOPMENT.md)**: architecture, data model, privacy, engine rules, testing, release process, known limitations. For auditors and developers.
 
 ## Setup
@@ -55,15 +59,16 @@ Share the stable link with people trying the app. Use the dev link to preview wo
 
 ## Privacy: what leaves your machine
 
-**Only weather lookups.** PackWise has no backend, accounts, analytics, cloud database or cloud file storage, and loads no fonts, icons or scripts from a CDN.
+**Only weather and place lookups.** PackWise has no backend, accounts, analytics, cloud database or cloud file storage, and loads no fonts, icons or scripts from a CDN.
 
 | Request | Sent to | Contains |
 | --- | --- | --- |
 | Find destination | `geocoding-api.open-meteo.com` | the destination name you typed |
 | Forecast (dates within 16 days) | `api.open-meteo.com` | latitude/longitude, date range |
 | Typical weather (dates beyond 16 days) | `archive-api.open-meteo.com` | latitude/longitude, the same dates in the 3 previous years |
+| Address, activity-place and airport search | `nominatim.openstreetmap.org` | the search text you typed (and, for activities, the trip area as a hint) |
 
-Your closet, photos, activities, outfits and packing lists are **never** sent anywhere. All `fetch` calls live in [`src/weather/openMeteo.ts`](src/weather/openMeteo.ts). A unit test checks that weather requests carry only coordinates, dates and the requested fields.
+Your closet, photos, activities, outfits and packing lists are **never** sent anywhere. Weather `fetch` calls live in [`src/weather/openMeteo.ts`](src/weather/openMeteo.ts) and place searches in [`src/weather/photon.ts`](src/weather/photon.ts). A unit test checks that weather requests carry only coordinates, dates and the requested fields.
 
 ## Your data and backups
 
@@ -109,7 +114,7 @@ For each trip day, PackWise tries these sources in order:
 3. **Cached:** if the network fails, the last stored result is used (each day stores `fetchedAt`).
 4. **Manual:** if there's no cache either, you enter the high, low and rain % yourself.
 
-Each day shows a badge: *Live forecast*, *Historical average*, *Cached forecast* or *Manual entry*. An offline banner appears whenever the network is unavailable. Weather is fetched automatically when a trip opens (if it's missing or more than 3 hours old), and **Refresh weather** fetches it again on demand.
+Each day's weather is for where you are that day: it follows the transportation legs on the Itinerary (with a separate forecast for the starting city on travel days) and falls back to the trip destination. Every set can be edited by hand. Each shows a badge: *Live forecast*, *Historical average*, *Cached forecast* or *Manual entry*. An offline banner appears whenever the network is unavailable. Weather is fetched automatically when a trip opens (if it's missing or more than 3 hours old), and **Refresh weather** fetches it again on demand.
 
 ## Outfit logic (rules-based v1)
 
@@ -117,7 +122,7 @@ The engine lives in [`src/engine/`](src/engine) and is pure TypeScript: no React
 
 - Temperature maps to a core warmth target and a minimum outerwear warmth (`rules.ts › warmthNeeds`).
 - Precipitation chance **> 50%** requires rain-ready outerwear or footwear.
-- Activities set the required formality (business → formal; dinner out or nightlife → smart casual) and boost items tagged for those activities.
+- Activities set the required formality (business → formal; work, dinner out or nightlife → smart casual) and boost items tagged for those activities.
 - **Suggest outfit** dresses for the activities you pick for that outfit, keeping any locked items. **Suggest outfits for empty days** gives a day with different kinds of activities (e.g. hiking + dinner) one outfit for each.
 - Items already chosen on other days score higher, to keep the packing list small, but only while they have clean wears left. An item can be worn **copies owned × wears before washing** times per trip. Beyond that it's avoided, and if it's still used you get a warning to pack more or plan laundry.
 - Each item's favorite score adds up to +2.5 to its score (5 ★), so preferred items win when they fit, but they never override weather, rain or formality rules. Saved outfits are ranked by how well their items fit the day, with +2 for favorite outfits.
@@ -132,7 +137,7 @@ src/
   db/          Dexie schema, types, seed data, backup (export/import), persistence
   weather/     Open-Meteo client, fallback chain, trip weather persistence
   engine/      pure outfit + packing logic (unit tested)
-  features/    closet, trips, outfits, packing, settings UI
+  features/    closet, trips (incl. itinerary), outfits, packing, trash, settings UI
   components/  small shared UI pieces and inline SVG icons
   lib/         dates, units, hooks, hash router, image resizing
 ```
@@ -144,3 +149,6 @@ src/
 - `src/engine/suggest.test.ts`: warmth/rain/formality rules, occasions, locks and conflicts, no consecutive repeats, reuse, gaps, swaps, packing helpers.
 - `src/weather/resolveWeather.test.ts`: the live → historical → cached → manual chain, HTTP and offline failures, and what gets sent.
 - `src/db/backup.test.ts`: export/import round trip including photo Blobs, weather cache persistence, packing sync that keeps checkmarks.
+- `src/features/trips/transportPlan.test.ts`, `dayPlaces.test.ts`: legs, layovers, drive estimates, cruises, round trips, trip date shifts, daily places and weather refresh rules.
+- `src/features/closet/closetScopes.test.ts`, `src/engine/sleepwear.test.ts`, `src/engine/rules.test.ts`: tab scopes and filters, sleepwear suggestions, new weather tags.
+- `src/features/packing/generalItems.test.ts`, `src/features/trash/trash.test.ts`: general item defaults, travel days, date-change prompts, trash restore and expiry.

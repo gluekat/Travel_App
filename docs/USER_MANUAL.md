@@ -13,7 +13,7 @@ Your closet, photos and trips stay on your device. PackWise has no account, no s
 2. [A quick tour](#2-a-quick-tour)
 3. [Your closet](#3-your-closet)
 4. [Saved outfits](#4-saved-outfits)
-5. [Planning a trip](#5-planning-a-trip)
+5. [Planning a trip](#5-planning-a-trip) (incl. the Itinerary, §5.5)
 6. [Choosing outfits for each day](#6-choosing-outfits-for-each-day)
 7. [The Packing Checklist](#7-the-packing-checklist)
 8. [Keeping your data safe](#8-keeping-your-data-safe)
@@ -21,6 +21,7 @@ Your closet, photos and trips stay on your device. PackWise has no account, no s
 10. [Using PackWise offline](#10-using-packwise-offline)
 11. [Privacy](#11-privacy)
 12. [Troubleshooting and FAQ](#12-troubleshooting-and-faq)
+13. [The Trash](#13-the-trash)
 
 ---
 
@@ -58,15 +59,16 @@ The desktop app saves everything automatically to **Documents/PackWise/packwise-
 
 ## 2. A quick tour
 
-The bar at the top has three sections:
+The bar at the top has four sections:
 
 | Section | What it's for |
 |---|---|
-| **Closet** | Your clothes and your saved outfits |
+| **Closet** | Your clothes, shoes, accessories, general packing items and saved outfits |
 | **Trips** | Your trips, their daily outfits and packing checklists |
-| **Data & privacy** | Where your data is saved, backups, temperature unit, privacy |
+| **Trash** | Deleted trips and items, kept for 30 days (§13) |
+| **Data & privacy** | Where your data is saved, backups, temperature unit, home location and airport, privacy |
 
-**First time?** PackWise starts with a **sample wardrobe** of 18 items, so you can try everything straight away. Remove the samples whenever you like with **Clear samples** in the Closet.
+**First time?** PackWise starts with a **sample wardrobe** of about 18 items, so you can try everything straight away. Remove the samples whenever you like with **Clear samples** in the Closet.
 
 **The basic flow:**
 1. Add your clothes to the **Closet**.
@@ -78,7 +80,18 @@ The bar at the top has three sections:
 
 ## 3. Your closet
 
-Open **Closet**. It has two tabs: **Items** (your clothes) and **Outfits** (saved outfits, §4).
+Open **Closet**. Its tabs:
+
+| Tab | What it shows |
+|---|---|
+| **Items** | Everything: clothing, shoes, accessories and general packing items. Has search, filters, sorting and **Group: Category** |
+| **Clothing** | Clothing only: everything that isn't a shoe, an accessory or a general item |
+| **Shoes** | Shoes only |
+| **Accessories** | Hats, scarves, gloves, belts, purses, bags, jewelry… Filter by type or choose **Group: Type** |
+| **General** | General packing items such as chargers and toiletries (§3.4) |
+| **Outfits** | Saved outfits (§4) |
+
+Each trip also has a **Closet** tab with the same views, so you can look through your clothes without leaving the trip.
 
 ### 3.1 Adding an item
 
@@ -89,17 +102,22 @@ Click **Add item** and fill in:
 | **Photo** | **Upload photo**, or **Camera** on phones | Helps you recognise items. Photos are shrunk to save space and never leave your device |
 | **Favorite score** | 0–5 stars | Higher-rated items are suggested more often |
 | **Name** | e.g. "Navy crew tee" | |
-| **Category** | top, bottom, dress, outerwear, shoes, accessory, swimwear, activewear | Decides where the item goes in an outfit |
+| **Category** | top, bottom, dress, one-piece, outerwear, shoes, accessory, swimwear, activewear, underwear, pajamas, or **general** | Decides where the item goes in an outfit and which tab shows it. Choosing **general** switches to the general-item form (§3.4) |
+| **Accessory type** (accessories) | hat, scarf, gloves, belt, purse, bag, jewelry, other | Lets you filter and group accessories |
+| **Type** (pajamas, activewear, underwear) | top, bottom, one-piece; pajamas and activewear can also be **shoes** or **accessories** | Sleepwear suggestions and the Shoes / Accessories tabs use it |
 | **Color** | e.g. "navy" | For your reference and search |
-| **Warmth** | 1 (very light) to 5 (very warm) | Matched to the temperature |
+| **Warmth** | 1 (very light) to 5 (very warm), or tick **None / not applicable** (belts, jewelry…) | Matched to the temperature; items with no warmth are ignored for it |
 | **Formality** | casual, smart casual, formal | Matched to activities (e.g. business → formal) |
 | **Quantity owned** | How many identical ones you have, e.g. 5 pairs of white socks | Lets PackWise plan more wears and pack more copies |
 | **Wears before washing** | e.g. tee 1, jeans 3, shoes or jacket 10 | Together with quantity, decides how many days an item can cover |
-| **Weather tags** | rain-ready, sun, cold, hot | Rain-ready items are chosen on rainy days, and so on |
-| **Good for** | sightseeing, hiking, beach, dinner out, business, travel day, nightlife, workout, lounging | Matched to each day's activities |
+| **Weather tags** | rain-ready, sun, hot, warm, mild, cool, chilly, cold, snow, windy | Rain-ready items are chosen on rainy days, hot/warm items on hot days, and so on |
+| **Good for** | sightseeing, hiking, beach, dinner out, business, work, travel day, nightlife, workout, lounging | Matched to each day's activities |
+| **Details** (optional) | Size, material and notes | Shown on the item's card and searchable |
 | **Custom tags** | Any word, e.g. *packable*, *wrinkle-free*. Type it and press **Enter** | Your own labels for searching and filtering |
 
-Click **Add item** to save. To change an item, click its ✏️ pencil. To delete it, click its 🗑️ bin. Deleting an item also removes it from any outfits.
+Click **Add item** to save. To change an item, click its ✏️ pencil; closing the edit window with **X** saves your changes. Click the copy button to **duplicate** an item (the copy is named "… (duplicate)"). To delete an item, click its 🗑️ bin: it also leaves any outfits, and goes to the Trash for 30 days (§13).
+
+The same **Add item** form is used on every tab. Pick the category and the item is saved on the matching tab.
 
 > **Tip:** quantity × wears before washing = how many times an item can be worn on one trip. Three tees worn once each cover 3 days. One pair of jeans worn 3 times covers 3 days.
 
@@ -109,10 +127,21 @@ Tap the ★ stars directly on an item's card. Tap the same star again to clear t
 
 ### 3.3 Finding items
 
-- **Search** by name, color or tag.
+- **Search** by name, color, size, material or tag.
 - Filter by **category** (the row of buttons).
 - Filter by a **tag**: weather, activity or one of your own tags. Click a **#tag** on any card to filter by it.
 - **★ favorites (4+)** shows your best-loved items.
+- **Sort** by date added, name, category, favorite, warmth, formality, tags; **Group** by category (or by type on the Accessories tab).
+
+### 3.4 General packing items
+
+The **General** tab is your reusable list of things that aren't clothes: chargers, toiletries, documents, medications…
+
+- Each item has a **sub category** (Toiletries, Electronics, Medications, Make-Up, Hair Supplies, Documents & Money, Clothing Basics, Health & Safety, Entertainment, Outdoor & Gear, Other). PackWise suggests one from the name.
+- Give it a **photo** or an **emoji** (PackWise suggests emoji that match the name). It shows next to the name here and in the Packing Checklist.
+- **Quantity** is either a fixed amount per trip or *per day of the trip*.
+- **Default** means "add to every new trip's Packing Checklist". **Trip types** (beach, business…) and your own **custom tags** (camping, outdoors…) help you remember what suits which kind of trip.
+- Sort by category or name, and filter by tag.
 
 ---
 
@@ -140,13 +169,17 @@ When you ask for suggestions on a trip day, PackWise also shows your **saved out
 
 No internet? You can still save the trip and type the weather in yourself (§5.3).
 
-### 5.2 Trip Overview and Packing Checklist tabs
+### 5.2 Trip tabs
 
-Each trip has two tabs under its name:
+Each trip has four tabs under its name:
 - **Trip Overview** (opens first): the days, weather, activities and outfits.
 - **Packing Checklist**: what to pack (§7).
+- **Itinerary**: transportation, lodging and scheduled activities (§5.5).
+- **Closet**: your closet, for a quick look without leaving the trip.
 
-Use **Edit** to change the destination or dates. Days are added or removed to match. The 🗑️ button deletes the trip.
+Use **Edit** to change the destination or dates. Days are added or removed to match, and the first and last day get the **travel day** activity automatically. If lodging or transportation dates should move with the trip, PackWise lists the proposed changes and asks you to confirm each one; anything you decline is marked **Needs updating** on the Itinerary page. The 🗑️ button deletes the trip (it goes to the Trash, §13).
+
+**Trip Notes** is a single box for anything you want to remember (weather, dress codes, reminders). **Laundry:** each day has **Plan laundry**; pick the items to wash, and wear counts restart after that day. Each outfit item shows which wear it is ("wear 2 of 3") and turns orange on the day it passes its allowance. If an item may not suit the forecast, a notice lists it; click × to clear a warning (or **Clear all**).
 
 ### 5.3 Weather
 
@@ -163,9 +196,28 @@ PackWise fetches the weather automatically when you open a trip. Each day shows 
 - Click **edit** next to a day's weather to type your own numbers.
 - If a day has no weather at all, a small form asks for the high, low and rain %.
 
+Weather follows where you are. If you add transportation on the Itinerary page, each day's place and weather come from it: days after you arrive show the destination, and a travel day shows **both** places (for example *New York → Rome*), each with its own forecast, its source badge and an **edit** link. Without transportation, the trip destination is used.
+
 ### 5.4 Activities
 
-Under each day, tap the activities you have planned, e.g. *sightseeing* and *dinner out*. These decide how dressy or sporty the suggestions are.
+Under each day, tap the activities you have planned, e.g. *sightseeing*, *work* and *dinner out*. These decide how dressy or sporty the suggestions are.
+
+### 5.5 The Itinerary
+
+Open the trip's **Itinerary** tab. At the top is the trip's name, place and dates, then:
+
+**Transportation.** A green summary shows your departure, final arrival and (for round trips) return departure and arrival. Below it, each direction lists **every leg in order** ("Leg 1, Leg 2…") with times, places, carrier and flight number.
+- Click **Add transport** and choose **Outbound**, **Return** or **Round trip** (adds the outbound journey and the same route back on the last day). A trip can also be one-way.
+- Choose the type: **Flight**, **Drive**, **Train** or **Cruise / Boat**. Fill in the departure (place, date and time, airline and flight number), any **layovers / stops** (each with arrival and departure date and time, airline and flight number) and the **final arrival**.
+- For flights the place boxes **search airports** by code, name or city; your **home airport** (Data & privacy) is filled in for you.
+- **Layover times** between flights, trains and cruise legs are worked out for you. **Drive** legs get an estimated distance (miles) and drive time. Times are the clock times you enter; time zones are not taken into account.
+- When the type of travel changes (for example flight → drive) a divider separates the legs. **Cruises** appear together in their own block.
+
+**Lodging.** Add each stay with its dates. If a stay ends before the trip does, PackWise offers **Extend**. Nights on a cruise need no lodging.
+
+**Scheduled activities.** Each day lists its location and weather, a **Travel day** box summarising that day's departures and arrivals, and the activities you add (time, place search, notes). Cruise days are labelled **Cruise day**.
+
+Click **Print** for a paper copy.
 
 ---
 
@@ -182,6 +234,10 @@ Each day shows its weather, activities and **the outfit(s) you've chosen**. New 
 - Click the outfit's **name** to rename it, e.g. "Hiking" or "Dinner".
 
 Under each item you'll see, for example, *"2 of 3 wears planned"*. If an item is planned more times than you have clean copies, you'll see a warning.
+
+**Add outfit** opens a chooser: **New outfit**, **Sleepwear** (pre-filled with a pajama top and bottom, or a one-piece, from your Pajamas; *Suggest outfit* then also offers pajama shoes and accessories) or **Add from saved outfits** (with pictures of each outfit's items).
+
+Click an item's picture or name in an outfit to open its details and edit it.
 
 ### 6.2 More than one outfit per day
 
@@ -215,7 +271,9 @@ Open the trip's **Packing Checklist** tab.
 - **Pieces total:** everything to pack, and how many lines you've ticked.
 - **"N outfits from M clothing pieces"** and **mix-and-match:** how hard each piece is working. Higher means packing lighter.
 
-**General items (for the whole trip).** Every trip starts with:
+**Warnings and laundry.** The same wear warnings as the Trip Overview appear at the top (one per day), together with the forecast notice and a **Laundry planned** box. Fixing a problem on the Overview clears it here.
+
+**General items (for the whole trip).** New trips start with every **Default**-tagged item from your Closet → General tab. Out of the box:
 
 | Item | Default |
 |---|---|
@@ -226,7 +284,8 @@ Open the trip's **Packing Checklist** tab.
 
 - Use **− / +** to change a quantity. **per day** items multiply by the number of days.
 - Click **per day** / **fixed** to switch how an item is counted.
-- Add your own items (chargers, passport, medications…) by typing them in, or with the **+** suggestions. Remove an item with ✕.
+- General items are grouped by category and sorted by name.
+- Add your own items by typing them in, or with the **+** suggestions from your General list (filter them by trip type). Tick **Also save to my general items list** to keep a new item for next time, or use **Save to my list** on a row. Remove an item with ✕.
 
 **Clothes** are grouped by category, with **×2**, **×3** etc. when you need several copies of the same item, worked out from your outfits and *wears before washing*. Each line also shows how many times the item will be worn.
 
@@ -275,6 +334,8 @@ On **Data & privacy**:
 
 | Setting | Options |
 |---|---|
+| **Home location** | Your address or city; pre-fills where outbound travel starts |
+| **Home airport** | Your 3-letter airport code (e.g. JFK); pre-fills flight departures |
 | **Temperature unit** | °F or °C |
 | **Persistent storage** | Shows whether your browser has agreed not to clear PackWise's data on its own when space runs low |
 | **Where your data is saved** | Data file options (§8.1) |
@@ -296,9 +357,11 @@ While offline:
 ## 11. Privacy
 
 - **Stays on your device:** your closet, photos, saved outfits, trips, activities, outfits and checklists. They are never uploaded anywhere.
-- **Sent to Open-Meteo**, the free weather service, and nothing more:
+- **Sent to Open-Meteo**, the free weather service:
   - the **destination name** you type, when you press **Find**;
-  - the destination's **coordinates and your trip dates**, to get the weather.
+  - the **coordinates and your trip dates** of the places you are in, to get the weather.
+- **Sent to OpenStreetMap (Nominatim)**, a free map service, only when you search for an address, an activity place or an airport: the **text you typed**.
+- Nothing else leaves your device.
 - No accounts, no tracking, no ads, no analytics.
 - When using the website, GitHub (which hosts the site) sees that someone loaded the page, as for any website, but never your data.
 
@@ -330,4 +393,16 @@ Those browsers don't allow websites to save to a file on your device. Use **Expo
 The app isn't signed by Microsoft or Apple yet. See §1.2 for how to open it safely.
 
 **How do I start over?**
-Delete trips with their 🗑️ button, and closet items individually or with **Clear samples**. To wipe everything, clear this site's data in your browser settings. PackWise then starts fresh with the sample wardrobe. If a data file is linked, click **Stop using file** first, or reopening the file would bring your data back.
+Delete trips with their 🗑️ button, and closet items individually or with **Clear samples** (samples are removed permanently). Deleted trips and items stay in the Trash for 30 days (§13). To wipe everything, clear this site's data in your browser settings. PackWise then starts fresh with the sample wardrobe. If a data file is linked, click **Stop using file** first, or reopening the file would bring your data back.
+
+---
+
+## 13. The Trash
+
+When you delete a **trip**, a **closet item** or a **general packing item**, it goes to the **Trash** (top bar) instead of disappearing. The bar shows how many things are waiting there.
+
+- Each entry shows what it is, when it was deleted and **how many days are left**.
+- **Restore** puts it back exactly as it was. A trip comes back with its days, outfits, packing list, transportation, lodging and activities. A closet item returns to the trip outfits, saved outfits and packing lists it was removed from.
+- **Delete forever** removes one entry permanently, and **Empty trash** removes everything.
+- After **30 days** entries are removed automatically.
+- The Trash is not part of backups or the data file, and importing a backup empties it. **Clear samples** deletes sample items permanently.
