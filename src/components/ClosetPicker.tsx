@@ -11,6 +11,8 @@ export function ClosetPicker({
   excludeIds = [],
   confirmLabel = (n) => `Add ${n || ''} item${n === 1 ? '' : 's'}`,
   hint,
+  alreadyIn,
+  showSelected,
   onPick,
   onClose,
 }: {
@@ -20,6 +22,10 @@ export function ClosetPicker({
   confirmLabel?: (n: number) => string;
   /** Extra per-item info, e.g. clean wears left. */
   hint?: (item: ClosetItem) => ReactNode;
+  /** Items already in the outfit being edited, shown in the selection panel (they can't be picked again). */
+  alreadyIn?: number[];
+  /** Show a panel of the selected items while choosing (also on whenever `alreadyIn` is given). */
+  showSelected?: boolean;
   onPick: (ids: number[]) => Promise<void> | void;
   onClose: () => void;
 }) {
@@ -35,6 +41,9 @@ export function ClosetPicker({
         (!q || i.name.toLowerCase().includes(q) || i.color.toLowerCase().includes(q) || (i.customTags ?? []).some((t) => t.includes(q))),
     )
     .sort((a, b) => (b.favorite ?? 0) - (a.favorite ?? 0));
+  const byId = new Map(closet.map((i) => [i.id!, i]));
+  const existing = (alreadyIn ?? []).map((id) => byId.get(id)).filter((i): i is ClosetItem => !!i);
+  const chosen = picked.map((id) => byId.get(id)).filter((i): i is ClosetItem => !!i);
   const toggle = (id: number) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   return (
@@ -51,7 +60,35 @@ export function ClosetPicker({
             </Chip>
           ))}
         </div>
-        <ul className="max-h-[45vh] space-y-1.5 overflow-y-auto">
+        {(showSelected || alreadyIn) && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2" aria-label="Selected items">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {alreadyIn ? `In this outfit (${existing.length + chosen.length})` : `Selected (${chosen.length})`}
+            </p>
+            {existing.length + chosen.length === 0 ? (
+              <p className="text-xs text-slate-400">Nothing selected yet. Tick items below.</p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {existing.map((item) => (
+                  <li key={`e${item.id}`} className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white py-1 pl-1 pr-2 text-xs text-slate-600">
+                    <ItemThumb item={item} size="h-8 w-8" />
+                    <span className="max-w-[8rem] truncate">{item.name}</span>
+                  </li>
+                ))}
+                {chosen.map((item) => (
+                  <li key={`c${item.id}`} className="flex items-center gap-1.5 rounded-lg border border-teal-500 bg-teal-50 py-1 pl-1 pr-1 text-xs">
+                    <ItemThumb item={item} size="h-8 w-8" />
+                    <span className="max-w-[8rem] truncate font-medium">{item.name}</span>
+                    <button type="button" className="rounded px-1 text-slate-500 hover:text-red-700" onClick={() => toggle(item.id!)} aria-label={`Unselect ${item.name}`}>
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        <ul className="max-h-[40vh] space-y-1.5 overflow-y-auto">
           {list.map((item) => (
             <li key={item.id}>
               <label className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2 ${picked.includes(item.id!) ? 'border-teal-500 bg-teal-50' : 'border-slate-200'}`}>

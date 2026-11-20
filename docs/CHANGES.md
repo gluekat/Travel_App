@@ -7,6 +7,7 @@ A brief overview of what was added or changed in this round of development (abou
 - **One add/edit form for every kind of item.** Choosing the category *general* switches to the general-item form; items are saved where they belong. Closing an existing item with **X** saves it.
 - **New item details:** warmth *none / not applicable*, size, material, notes, accessory type, one-piece category, more weather tags (cool, mild, warm, chilly, snow, windy), *Work* activity, pajama/activewear types for shoes and accessories.
 - **General packing items:** categories (Toiletries, Electronics, …), emoji or photo with emoji suggestions, *Default* tag (added to every new trip), trip-type and custom tags.
+- Click-to-reverse sorting (first click ascending, second reverses); saved outfits can be duplicated and show a selected-items panel while you choose; the Trash also holds saved outfits.
 - Duplicate adds "(duplicate)"; photos no longer disappear after edits.
 
 ## Trips
@@ -31,5 +32,5 @@ A brief overview of what was added or changed in this round of development (abou
 - Data schema moved from v5 to v8 (general items, trash, travel-day migration). Backups exclude the trash.
 
 ## Quality
-- Test suite grew from 78 to 112 tests; build and type-check clean.
+- Test suite grew from 78 to 114 tests; build and type-check clean.
 - Privacy note updated: address, place and airport searches now also go to OpenStreetMap Nominatim (text you type only).

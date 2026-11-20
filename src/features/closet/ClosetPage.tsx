@@ -11,7 +11,8 @@ import { SavedOutfitsView } from './SavedOutfitsView';
 import { GeneralItemCard, GeneralItemsView, ItemEditorModal, confirmDeleteGeneralItem } from './GeneralItemsView';
 import type { EditorTarget } from './ItemEditor';
 import { ensureGeneralLibrary } from '../packing/generalItemsService';
-import { groupEntries, inScope, isAccessory, isClothing, isShoes, matchesFilters, sortEntries, type Entry, type GroupBy, type Scope, type SortKey } from './closetScopes';
+import { SortBar, type SortDir } from '../../components/SortBar';
+import { SORT_OPTIONS, groupEntries, inScope, isAccessory, isClothing, isShoes, matchesFilters, sortEntries, type Entry, type GroupBy, type Scope, type SortKey } from './closetScopes';
 
 export type ClosetView = 'items' | 'clothing' | 'shoes' | 'accessories' | 'general' | 'outfits';
 
@@ -129,6 +130,8 @@ function ItemsView({ scope }: { scope: Scope }) {
   const [tag, setTag] = useState<string | null>(null);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>('default');
+  // Newest first until a sort is chosen; the first click on a method sorts ascending, the next reverses it.
+  const [dir, setDir] = useState<SortDir>('desc');
   const [group, setGroup] = useState<GroupBy>(scope === 'accessories' ? 'type' : 'none');
   const [editing, setEditing] = useState<EditorTarget | null>(null);
 
@@ -136,7 +139,7 @@ function ItemsView({ scope }: { scope: Scope }) {
     () => [...(closetItems ?? []).map((item) => ({ kind: 'closet' as const, item })), ...(scope === 'all' ? (generalItems ?? []).map((item) => ({ kind: 'general' as const, item })) : [])].filter((e) => inScope(e, scope)),
     [closetItems, generalItems, scope],
   );
-  const visible = useMemo(() => sortEntries(entries.filter((e) => matchesFilters(e, { query, category, tag, favoritesOnly, accessoryType })), sort), [entries, query, category, tag, favoritesOnly, accessoryType, sort]);
+  const visible = useMemo(() => sortEntries(entries.filter((e) => matchesFilters(e, { query, category, tag, favoritesOnly, accessoryType })), sort, dir), [entries, query, category, tag, favoritesOnly, accessoryType, sort, dir]);
   const groups = useMemo(() => groupEntries(visible, group), [visible, group]);
   const sampleCount = closetItems?.filter((i) => i.isSample).length ?? 0;
   const text = SCOPE_TEXT[scope];
@@ -183,6 +186,7 @@ function ItemsView({ scope }: { scope: Scope }) {
             ))}
           </div>
         )}
+        <SortBar options={SORT_OPTIONS} value={sort} dir={dir} onChange={(k, d) => { setSort(k); setDir(d); }} />
         <div className="flex flex-wrap items-center gap-2">
           <select className={`${inputClass} sm:w-64`} value={tag ?? ''} onChange={(e) => setTag(e.target.value || null)} aria-label="Filter by tag">
             <option value="">Any tag</option>
@@ -205,17 +209,6 @@ function ItemsView({ scope }: { scope: Scope }) {
                 ))}
               </optgroup>
             )}
-          </select>
-          <select className={`${inputClass} sm:w-44`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort by">
-            <option value="default">Sort: Date added</option>
-            <option value="name">Sort: Name A→Z</option>
-            <option value="category">Sort: Category</option>
-            <option value="favorite">Sort: Favorite ↓</option>
-            <option value="warmth">Sort: Warmth ↓</option>
-            <option value="formality">Sort: Formality</option>
-            <option value="weather">Sort: Weather tags</option>
-            <option value="activity">Sort: Activity tags</option>
-            <option value="customtags">Sort: Custom tags</option>
           </select>
           {groupOptions.length > 0 && (
             <select className={`${inputClass} sm:w-44`} value={group} onChange={(e) => setGroup(e.target.value as GroupBy)} aria-label="Group by">

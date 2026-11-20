@@ -131,7 +131,7 @@ Tap the ★ stars directly on an item's card. Tap the same star again to clear t
 - Filter by **category** (the row of buttons).
 - Filter by a **tag**: weather, activity or one of your own tags. Click a **#tag** on any card to filter by it.
 - **★ favorites (4+)** shows your best-loved items.
-- **Sort** by date added, name, category, favorite, warmth, formality, tags; **Group** by category (or by type on the Accessories tab).
+- **Sort** with the buttons (date added, name, category, favorite, warmth, formality, tags): the first click sorts ascending (▲), click the same button again to reverse (▼). Until you choose, the newest items come first. **Group** by category (or by type on the Accessories tab).
 
 ### 3.4 General packing items
 
@@ -153,6 +153,8 @@ Outfits you like can be saved in the closet and reused on any trip.
 - **Save one from a trip:** on any outfit in a trip, click **Save to closet**.
 - **Favourite:** tap the ★ next to the outfit name. Use **★ favorites only** to filter.
 - **Edit:** rename it by clicking the name, **Add items**, or remove an item with ✕.
+- **Duplicate:** the copy button makes "… (duplicate)" with the same items.
+- **While choosing items** (new outfit or **Add items**), a panel at the top shows the items you've selected (with × to unselect), plus the ones already in the outfit.
 - **Delete:** the 🗑️ button moves it to the Trash, where it can be restored for 30 days (§13).
 
 When you ask for suggestions on a trip day, PackWise also shows your **saved outfits that suit that day**, with favourites first (§6.3).
@@ -180,7 +182,7 @@ Each trip has four tabs under its name:
 
 Use **Edit** to change the destination or dates. On a **multi-stop trip** every destination can be changed, re-dated, added or removed (**Add another destination**); the trip's overall dates follow the first start and last end. Days are added or removed to match, and the first and last day get the **travel day** activity automatically. If lodging or transportation dates should move with the trip, PackWise lists the proposed changes and asks you to confirm each one; anything you decline is marked **Needs updating** on the Itinerary page. The 🗑️ button deletes the trip (it goes to the Trash, §13).
 
-**Trip Notes** is a single box for anything you want to remember (weather, dress codes, reminders). **Laundry:** each day has **Plan laundry**; pick the items to wash, and wear counts restart after that day. Each outfit item shows which wear it is ("wear 2 of 3") and turns orange on the day it passes its allowance. If an item may not suit the forecast, a notice lists it; click × to clear a warning (or **Clear all**).
+**Trip Notes** is a single empty box for anything you want to remember (weather, dress codes, reminders); the grey text is only an example. Notes from older versions are offered under the box ("Use as the note") rather than filled in. **Laundry:** each day has **Plan laundry**; pick the items to wash, and wear counts restart after that day. Each outfit item shows which wear it is ("wear 2 of 3") and turns orange on the day it passes its allowance. If an item may not suit the forecast, a notice lists it; click × to clear a warning (or **Clear all**).
 
 ### 5.3 Weather
 
@@ -207,7 +209,7 @@ Under each day, tap the activities you have planned, e.g. *sightseeing*, *work* 
 
 Open the trip's **Itinerary** tab. At the top is the trip's name, place and dates, then:
 
-**Placeholders.** When a trip is created, PackWise adds a placeholder flight for each hop: home → first destination, each destination → the next, and last destination → home, with the dates taken from the destinations and your home airport as the start. They are marked **Placeholder** until you open one (**Fill in**), choose the real type of travel and enter times and booking details. Editing a trip's destinations or dates updates the placeholders you haven't filled in; filled-in bookings are never changed.
+**Placeholders.** When a trip is created, PackWise adds a placeholder flight for each hop: home → first destination, each destination → the next, and last destination → home, with the dates taken from the destinations and your home airport as the start. They are marked **Placeholder** until you open one (**Fill in**), choose the real type of travel (switching a placeholder to train, drive or cruise changes its airports to cities, and back to a flight picks the nearest airport) and enter times and booking details. Editing a trip's destinations or dates updates the placeholders you haven't filled in; filled-in bookings are never changed.
 
 **Transportation.** A green summary shows your departure, final arrival and (for round trips) return departure and arrival. Below it, each direction lists **every leg in order** ("Leg 1, Leg 2…") with times, places, carrier and flight number.
 - Click **Add transport** and choose **Outbound**, **Return** or **Round trip** (adds the outbound journey and the same route back on the last day). A trip can also be one-way.

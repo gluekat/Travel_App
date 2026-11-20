@@ -223,7 +223,10 @@ export async function duplicateTrip(source: Trip, newStartDate: string, newEndDa
     }
 
     // Copy general packing items; closet-item rows re-derived below via syncPacking
-    const generals = sourcePackingItems.filter((p) => p.customLabel != null);
+    // The old built-in defaults (Underwear, Socks, Jacket, Toiletries) are only carried over if they are still Default items.
+    const stillDefault = new Set((await db.generalItems.filter((i) => i.isDefault).toArray()).map((i) => i.name.toLowerCase()));
+    const legacy = new Set(['underwear', 'socks', 'jacket', 'toiletries']);
+    const generals = sourcePackingItems.filter((p) => p.customLabel != null && (!legacy.has(p.customLabel.toLowerCase()) || stillDefault.has(p.customLabel.toLowerCase())));
     if (generals.length) {
       await db.packingItems.bulkAdd(generals.map(({ id: _id, ...p }) => ({ ...p, tripId: id, packed: false })));
     } else {

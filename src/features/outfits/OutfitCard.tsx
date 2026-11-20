@@ -233,6 +233,7 @@ export function OutfitCard(props: OutfitCardProps) {
           title={`Add items to ${outfit.label}`}
           closet={isSleepwearOutfit(outfit) ? closet.filter(isPajamas) : closet}
           excludeIds={outfit.itemIds}
+          alreadyIn={outfit.itemIds}
           hint={(item) => <WearHint item={item} usage={usage} inThisOutfit={false} />}
           onPick={(ids) => addItemsToOutfit(outfit.id!, ids)}
           onClose={() => setAdding(false)}

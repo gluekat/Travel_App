@@ -104,3 +104,16 @@ describe('travel days', () => {
     expect(await list()).toEqual([true, false, false, true, true]);
   });
 });
+
+describe('duplicating a trip', () => {
+  it('does not carry over old built-in defaults that are no longer Default items', async () => {
+    const { duplicateTrip } = await import('../trips/tripService');
+    const source = await createTrip('Rome', undefined, '2026-06-01', '2026-06-02');
+    await db.packingItems.add({ tripId: source, customLabel: 'Umbrella', qty: 1, packed: false });
+    const toiletries = (await db.generalItems.filter((i) => i.name === 'Toiletries').first())!;
+    await db.generalItems.delete(toiletries.id!);
+    const copy = await duplicateTrip((await db.trips.get(source))!, '2026-07-01', '2026-07-02');
+    const names = (await db.packingItems.where('tripId').equals(copy).toArray()).map((r) => r.customLabel).filter(Boolean).sort();
+    expect(names).toEqual(['Jacket', 'Socks', 'Umbrella', 'Underwear']);
+  });
+});
