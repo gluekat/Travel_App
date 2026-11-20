@@ -16,6 +16,4 @@ export async function updateSavedOutfit(id: number, changes: Partial<Pick<SavedO
   await db.savedOutfits.update(id, { ...changes, updatedAt: Date.now() });
 }
 
-export async function deleteSavedOutfit(id: number) {
-  await db.savedOutfits.delete(id);
-}
+export { deleteSavedOutfit } from '../../db/schema';

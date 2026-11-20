@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
-import type { Trip } from '../../db/types';
+import type { Trip, TripStop } from '../../db/types';
 import { addDays, dateRange, daysBetween, formatDay, formatTimestamp } from '../../lib/dates';
 import { useOnline, useTempUnit } from '../../lib/hooks';
 import { navigate } from '../../lib/router';
@@ -20,7 +20,8 @@ import { ForecastWarning } from './ForecastWarning';
 import { applyAdjustments, flagAdjustments, planTripDateAdjustments, type DateAdjustment } from './tripAdjustments';
 import { TripTabs } from './TripTabs';
 import { PlaceSearch } from './PlaceSearch';
-import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace } from './tripService';
+import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace, setTripStops } from './tripService';
+import { refreshPlaceholders } from './placeholders';
 
 function TripNotesSection({ trip }: { trip: Trip }) {
   // Older trips kept separate weather and packing notes; show them together in the one field.
@@ -58,6 +59,63 @@ export function tripLabel(t: Trip): string {
     return t.stops.map(s => s.label.split(',')[0].trim()).join(' → ');
   }
   return t.placeLabel ?? t.destination;
+}
+
+/** One destination being edited: the text in the search box, plus the place picked from it (if any). */
+interface StopEdit extends TripStop {
+  query: string;
+  place?: Place;
+}
+
+/** Edited drafts back into stops: a newly picked place brings its coordinates; unchanged text keeps the old ones. */
+function stopsFromDrafts(drafts: StopEdit[]): TripStop[] {
+  return drafts.map((d) => {
+    const label = d.place?.label ?? d.query.trim();
+    const keep = !d.place && label === d.label;
+    return {
+      label,
+      lat: d.place ? d.place.lat : keep ? d.lat : undefined,
+      lon: d.place ? d.place.lon : keep ? d.lon : undefined,
+      timezone: d.place ? d.place.timezone : keep ? d.timezone : undefined,
+      startDate: d.startDate,
+      endDate: d.endDate,
+    };
+  });
+}
+
+const stopRange = (drafts: StopEdit[]): [string, string] => [drafts.map((s) => s.startDate).reduce((a, b) => (a < b ? a : b)), drafts.map((s) => s.endDate).reduce((a, b) => (a > b ? a : b))];
+
+/** Edit, add, remove and re-date the destinations of a multi-stop trip. */
+function StopsEditor({ stops, onChange }: { stops: StopEdit[]; onChange: (update: (prev: StopEdit[]) => StopEdit[]) => void }) {
+  // Functional updates: the search box reports a new query and clears the picked place in the same event.
+  const patch = (i: number, p: Partial<StopEdit>) => onChange((prev) => prev.map((s, j) => (j === i ? { ...s, ...p } : s)));
+  const addStop = () => onChange((prev) => [...prev, { label: '', query: '', startDate: prev[prev.length - 1].endDate, endDate: addDays(prev[prev.length - 1].endDate, 3) }]);
+  return (
+    <div className="space-y-3">
+      {stops.map((stop, i) => (
+        <div key={i} className="space-y-3 rounded-lg border border-slate-200 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-700">Stop {i + 1}</span>
+            {stops.length > 1 && (
+              <button type="button" onClick={() => onChange((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-red-600 hover:text-red-800">
+                Remove
+              </button>
+            )}
+          </div>
+          <Field label="Destination" hint={stop.label && !stop.place && stop.query === stop.label ? undefined : 'Pick a result so weather and the map location update.'}>
+            <PlaceSearch query={stop.query} onQuery={(q) => patch(i, { query: q, place: undefined })} selected={stop.place} onSelect={(p) => patch(i, { place: p })} />
+          </Field>
+          <Field label="Dates">
+            <DateRangePicker start={stop.startDate} end={stop.endDate} onChange={(s, e) => patch(i, { startDate: s, endDate: e })} />
+          </Field>
+        </div>
+      ))}
+      <button type="button" onClick={addStop} className="flex items-center gap-1 text-sm text-teal-700 hover:text-teal-900">
+        <Icon name="plus" className="h-4 w-4" /> Add another destination
+      </button>
+      <p className="text-xs text-slate-500">Saving updates the trip's days, weather and placeholder transportation to match. Lodging and bookings you've entered are offered new dates to confirm.</p>
+    </div>
+  );
 }
 
 /** After a trip's dates change: confirm which lodging and travel dates should move too. Declined ones stay flagged. */
@@ -118,20 +176,28 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
   const [end, setEnd] = useState(trip.endDate);
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<DateAdjustment[]>();
+  const multi = !!trip.stops && trip.stops.length > 1;
+  const [stopDrafts, setStopDrafts] = useState<StopEdit[]>(() => (trip.stops ?? []).map((s) => ({ ...s, query: s.label })));
 
   async function save() {
     try {
       if (name.trim() !== (trip.name ?? '')) {
         await db.trips.update(trip.id!, { name: name.trim() || undefined });
       }
-      const locationChanged = !!place;
-      const datesChanged = start !== trip.startDate || end !== trip.endDate;
-      if (place) await setTripPlace(trip.id!, place);
-      if (query.trim() !== trip.destination && !place) await db.trips.update(trip.id!, { destination: query.trim() });
-      if (datesChanged) {
+      const newStops = multi ? stopsFromDrafts(stopDrafts) : undefined;
+      const newStart = newStops ? newStops.map((s) => s.startDate).reduce((a, b) => (a < b ? a : b)) : start;
+      const newEnd = newStops ? newStops.map((s) => s.endDate).reduce((a, b) => (a > b ? a : b)) : end;
+      const stopsChanged = !!newStops && JSON.stringify(newStops) !== JSON.stringify(trip.stops);
+      const locationChanged = !!place || stopsChanged;
+      const datesChanged = newStart !== trip.startDate || newEnd !== trip.endDate;
+      if (!multi && place) await setTripPlace(trip.id!, place);
+      if (!multi && query.trim() !== trip.destination && !place) await db.trips.update(trip.id!, { destination: query.trim() });
+      if (datesChanged || stopsChanged) {
         // Lodging and travel dates are proposed, not silently changed: the user confirms below.
-        const plan = await planTripDateAdjustments(trip.id!, trip.startDate, trip.endDate, start, end);
-        await setTripDates(trip, start, end);
+        const plan = datesChanged ? await planTripDateAdjustments(trip.id!, trip.startDate, trip.endDate, newStart, newEnd) : [];
+        if (newStops) await setTripStops(trip, newStops);
+        else await setTripDates(trip, start, end);
+        await refreshPlaceholders(trip.id!);
         if (plan.length) {
           await flagAdjustments(plan, trip.startDate, trip.endDate);
           onRefreshWeather();
@@ -139,6 +205,7 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
           return;
         }
       }
+      if (!datesChanged && !stopsChanged && place) await refreshPlaceholders(trip.id!);
       onClose();
       if (locationChanged || datesChanged) onRefreshWeather();
     } catch (e) {
@@ -146,7 +213,7 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
     }
   }
 
-  const days = dateRange(start, end).length;
+  const days = multi ? dateRange(...stopRange(stopDrafts)).length : dateRange(start, end).length;
   if (pending) return <ConfirmDateAdjustments plan={pending} onClose={onClose} />;
   return (
     <Modal title="Edit trip" onClose={onClose}>
@@ -160,21 +227,13 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
             onChange={(e) => setName(e.target.value)}
           />
         </Field>
-        <Field label="Destination" hint={trip.placeLabel ? `Current: ${trip.placeLabel}` : 'No location set yet.'}>
-          <PlaceSearch query={query} onQuery={setQuery} selected={place} onSelect={setPlace} />
-        </Field>
-        {trip.stops && trip.stops.length > 1 ? (
-          <div className="space-y-1 rounded-lg border border-slate-200 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Destinations</p>
-            {trip.stops.map((stop, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm">
-                <span className="mt-0.5 text-teal-600">📍</span>
-                <span className="font-medium">{stop.label}</span>
-                <span className="text-slate-500">{formatDay(stop.startDate)} – {formatDay(stop.endDate)}</span>
-              </div>
-            ))}
-            <p className="mt-2 text-xs text-slate-500">Create a new trip to change destinations on a multi-stop trip.</p>
-          </div>
+        {!multi && (
+          <Field label="Destination" hint={trip.placeLabel ? `Current: ${trip.placeLabel}` : 'No location set yet.'}>
+            <PlaceSearch query={query} onQuery={setQuery} selected={place} onSelect={setPlace} />
+          </Field>
+        )}
+        {multi ? (
+          <StopsEditor stops={stopDrafts} onChange={setStopDrafts} />
         ) : (
           <>
             <Field label="Dates">
@@ -189,7 +248,7 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
         {error && <Banner tone="error">{error}</Banner>}
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={save} disabled={days < 1 || days > MAX_TRIP_DAYS}>
+          <Button variant="primary" onClick={save} disabled={days < 1 || days > MAX_TRIP_DAYS || (multi && stopDrafts.some((s) => !s.query.trim()))}>
             Save
           </Button>
         </div>

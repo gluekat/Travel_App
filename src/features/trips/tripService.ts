@@ -4,6 +4,8 @@ import type { Activity, Trip, TripStop } from '../../db/types';
 import { addDays, dateRange, daysBetween, todayISO } from '../../lib/dates';
 import type { Place } from '../../weather/openMeteo';
 import { syncPacking } from '../outfits/outfitService';
+import { refreshPlaceholders } from './placeholders';
+import { baseDayPlace, placeKey } from './dayPlaces';
 import { defaultPackingRows, ensureGeneralLibrary } from '../packing/generalItemsService';
 
 export const MAX_TRIP_DAYS = 30;
@@ -24,7 +26,7 @@ export async function createTrip(
   if (!dates.length) throw new Error('End date must be on or after the start date.');
   if (dates.length > MAX_TRIP_DAYS) throw new Error(`Trips can be at most ${MAX_TRIP_DAYS} days.`);
   await ensureGeneralLibrary();
-  return db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.generalItems], async () => {
+  const created = await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.generalItems], async () => {
     const hasStops = stops && stops.length > 0;
     const tripId = (await db.trips.add({
       destination: destination.trim(),
@@ -47,6 +49,9 @@ export async function createTrip(
     await db.packingItems.bulkAdd(await defaultPackingRows(tripId));
     return tripId;
   });
+  // Suggested hops to each destination and home again, for the user to fill in on the Itinerary.
+  await refreshPlaceholders(created);
+  return created;
 }
 
 export async function setTripPlace(tripId: number, place: Place) {
@@ -55,6 +60,49 @@ export async function setTripPlace(tripId: number, place: Place) {
   await db.tripDays.where('tripId').equals(tripId).modify((d) => {
     if (d.weather?.source !== 'manual') delete d.weather;
   });
+}
+
+/**
+ * Replace a multi-destination trip's stops. The trip's overall dates, days, day places and weather follow, and
+ * placeholder transportation is regenerated for the new destinations. Weather for days whose place changed is cleared
+ * (manual entries are kept) so it is fetched again.
+ */
+export async function setTripStops(trip: Trip, stops: TripStop[]) {
+  if (!stops.length) throw new Error('A trip needs at least one destination.');
+  if (stops.some((s) => !s.label.trim())) throw new Error('Every destination needs a name.');
+  if (stops.some((s) => s.endDate < s.startDate)) throw new Error('Each destination must end on or after its start date.');
+  const startDate = stops.map((s) => s.startDate).reduce((a, b) => (a < b ? a : b));
+  const endDate = stops.map((s) => s.endDate).reduce((a, b) => (a > b ? a : b));
+  await setTripDates(trip, startDate, endDate);
+
+  const multi = stops.length > 1;
+  const first = stops[0];
+  const updated: Trip = {
+    ...trip,
+    startDate,
+    endDate,
+    stops: multi ? stops : undefined,
+    destination: first.label.split(',')[0].trim(),
+    placeLabel: multi ? stops.map((s) => s.label.split(',')[0].trim()).join(' → ') : first.label,
+    lat: first.lat,
+    lon: first.lon,
+    timezone: first.timezone,
+  };
+  await db.trips.update(trip.id!, { stops: updated.stops, destination: updated.destination, placeLabel: updated.placeLabel, lat: updated.lat, lon: updated.lon, timezone: updated.timezone });
+
+  const days = await db.tripDays.where('tripId').equals(trip.id!).toArray();
+  await db.transaction('rw', db.tripDays, async () => {
+    for (const d of days) {
+      const before = baseDayPlace(trip, d.date);
+      const after = baseDayPlace(updated, d.date);
+      if (placeKey(before.lat, before.lon) === placeKey(after.lat, after.lon) && before.label === after.label) continue;
+      const patch: Partial<typeof d> = {};
+      if (d.weather && d.weather.source !== 'manual') patch.weather = undefined;
+      if (d.weatherFrom && d.weatherFrom.source !== 'manual') patch.weatherFrom = undefined;
+      if (Object.keys(patch).length) await db.tripDays.update(d.id!, patch);
+    }
+  });
+  await refreshPlaceholders(trip.id!);
 }
 
 /** Change a trip's date range, adding/removing days (and their outfits) as needed. */

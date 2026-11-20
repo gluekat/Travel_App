@@ -25,6 +25,8 @@ export interface Segment {
   notes?: string;
   /** The booking's "dates need updating" flag (on its first leg only). */
   needsAttention?: string;
+  /** A suggested hop the user hasn't filled in yet (first leg of the booking only). */
+  placeholder?: boolean;
   /** Driving distance, estimated from coordinates unless entered by hand. */
   distanceMiles?: number;
   /** Door-to-door time: driving estimate, or arrival minus departure when both are known. */
@@ -118,6 +120,7 @@ export function legSegments(leg: TransportLeg): Omit<Segment, 'n' | 'layoverMinu
       bookingRef: leg.bookingRef,
       notes: k === 0 ? leg.notes : undefined,
       needsAttention: k === 0 ? leg.needsAttention : undefined,
+      placeholder: k === 0 ? leg.placeholder : undefined,
     };
     const single = points.length === 2;
     if (leg.mode === 'drive') {

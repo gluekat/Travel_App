@@ -55,6 +55,11 @@ export async function restoreFromTrash(id: number): Promise<void> {
         });
       }
       for (const row of packingItems) if (await db.trips.get(row.tripId)) await db.packingItems.put(row);
+    } else if (entry.kind === 'savedOutfit') {
+      // Items deleted while the outfit was in the trash are left out.
+      const { outfit } = entry.data;
+      const existing = new Set((await db.closetItems.toArray()).map((i) => i.id!));
+      await db.savedOutfits.put({ ...outfit, itemIds: outfit.itemIds.filter((i) => existing.has(i)) });
     } else {
       await db.generalItems.put(entry.data.item);
     }

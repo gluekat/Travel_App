@@ -153,6 +153,7 @@ Outfits you like can be saved in the closet and reused on any trip.
 - **Save one from a trip:** on any outfit in a trip, click **Save to closet**.
 - **Favourite:** tap the ★ next to the outfit name. Use **★ favorites only** to filter.
 - **Edit:** rename it by clicking the name, **Add items**, or remove an item with ✕.
+- **Delete:** the 🗑️ button moves it to the Trash, where it can be restored for 30 days (§13).
 
 When you ask for suggestions on a trip day, PackWise also shows your **saved outfits that suit that day**, with favourites first (§6.3).
 
@@ -177,7 +178,7 @@ Each trip has four tabs under its name:
 - **Itinerary**: transportation, lodging and scheduled activities (§5.5).
 - **Closet**: your closet, for a quick look without leaving the trip.
 
-Use **Edit** to change the destination or dates. Days are added or removed to match, and the first and last day get the **travel day** activity automatically. If lodging or transportation dates should move with the trip, PackWise lists the proposed changes and asks you to confirm each one; anything you decline is marked **Needs updating** on the Itinerary page. The 🗑️ button deletes the trip (it goes to the Trash, §13).
+Use **Edit** to change the destination or dates. On a **multi-stop trip** every destination can be changed, re-dated, added or removed (**Add another destination**); the trip's overall dates follow the first start and last end. Days are added or removed to match, and the first and last day get the **travel day** activity automatically. If lodging or transportation dates should move with the trip, PackWise lists the proposed changes and asks you to confirm each one; anything you decline is marked **Needs updating** on the Itinerary page. The 🗑️ button deletes the trip (it goes to the Trash, §13).
 
 **Trip Notes** is a single box for anything you want to remember (weather, dress codes, reminders). **Laundry:** each day has **Plan laundry**; pick the items to wash, and wear counts restart after that day. Each outfit item shows which wear it is ("wear 2 of 3") and turns orange on the day it passes its allowance. If an item may not suit the forecast, a notice lists it; click × to clear a warning (or **Clear all**).
 
@@ -205,6 +206,8 @@ Under each day, tap the activities you have planned, e.g. *sightseeing*, *work* 
 ### 5.5 The Itinerary
 
 Open the trip's **Itinerary** tab. At the top is the trip's name, place and dates, then:
+
+**Placeholders.** When a trip is created, PackWise adds a placeholder flight for each hop: home → first destination, each destination → the next, and last destination → home, with the dates taken from the destinations and your home airport as the start. They are marked **Placeholder** until you open one (**Fill in**), choose the real type of travel and enter times and booking details. Editing a trip's destinations or dates updates the placeholders you haven't filled in; filled-in bookings are never changed.
 
 **Transportation.** A green summary shows your departure, final arrival and (for round trips) return departure and arrival. Below it, each direction lists **every leg in order** ("Leg 1, Leg 2…") with times, places, carrier and flight number.
 - Click **Add transport** and choose **Outbound**, **Return** or **Round trip** (adds the outbound journey and the same route back on the last day). A trip can also be one-way.
@@ -399,10 +402,10 @@ Delete trips with their 🗑️ button, and closet items individually or with **
 
 ## 13. The Trash
 
-When you delete a **trip**, a **closet item** or a **general packing item**, it goes to the **Trash** (top bar) instead of disappearing. The bar shows how many things are waiting there.
+When you delete a **trip**, a **closet item**, a **saved outfit** or a **general packing item**, it goes to the **Trash** (top bar) instead of disappearing. The bar shows how many things are waiting there.
 
 - Each entry shows what it is, when it was deleted and **how many days are left**.
-- **Restore** puts it back exactly as it was. A trip comes back with its days, outfits, packing list, transportation, lodging and activities. A closet item returns to the trip outfits, saved outfits and packing lists it was removed from.
+- **Restore** puts it back exactly as it was. A trip comes back with its days, outfits, packing list, transportation, lodging and activities. A closet item returns to the trip outfits, saved outfits and packing lists it was removed from. A saved outfit comes back with its items (any item deleted in the meantime is left out).
 - **Delete forever** removes one entry permanently, and **Empty trash** removes everything.
 - After **30 days** entries are removed automatically.
 - The Trash is not part of backups or the data file, and importing a backup empties it. **Clear samples** deletes sample items permanently.

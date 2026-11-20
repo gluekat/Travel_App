@@ -180,3 +180,12 @@ export async function deleteGeneralItem(itemId: number): Promise<void> {
     await db.generalItems.delete(itemId);
   });
 }
+
+/** Delete a saved outfit from the closet; it goes to the trash for 30 days. */
+export async function deleteSavedOutfit(id: number): Promise<void> {
+  await db.transaction('rw', db.savedOutfits, db.trash, async () => {
+    const outfit = await db.savedOutfits.get(id);
+    if (outfit) await db.trash.add({ kind: 'savedOutfit', name: outfit.name, deletedAt: Date.now(), data: { outfit } });
+    await db.savedOutfits.delete(id);
+  });
+}

@@ -101,6 +101,7 @@ PackWise helps a traveller decide what to wear and pack. The user enters their w
 | 11-15 → 11-20 | Sleepwear from pajamas (top+bottom or one-piece; shoes/accessories as variants) | `src/engine/sleepwear.ts`, `Outfit.sleepwear` |
 | 11-17 → 11-20 | Closet tabs (Items, Clothing, Shoes, Accessories, General, Outfits); one add/edit form for all kinds; general packing items with categories, tags, emoji/photo and Default tag | `closetScopes.ts`, `ItemEditor.tsx`, `GeneralItemForm.tsx`, `generalItemsService.ts`; table `generalItems` |
 | 11-20 | Item details: warmth N/A, size, material, notes, accessory type, one-piece category, more weather tags, Work activity | `ClosetItem` fields; engine treats warmth 0 as neutral |
+| 11-20 | Editable multi-stop trips; placeholder transport for each destination; saved outfits in the trash | `setTripStops`, `placeholders.ts` (`refreshPlaceholders`), `TransportLeg.placeholder`, trash kind `savedOutfit` |
 | 11-20 | Trash: deleted trips, closet items and general items kept 30 days | `trash` table, `trashService.ts`, `TrashPage.tsx` |
 
 ---
@@ -238,10 +239,10 @@ The application code is about 11,500 lines of TypeScript/TSX, tests included.
 - **Outfit**: `tripId, tripDayId, rank, label, activities?, itemIds[], lockedItemIds[], rationale`.
 - **PackingItem**: `tripId, packed`, plus either `itemId` (closet item; copies computed from outfits) or `customLabel` with `qty` or `perDay` (general item).
 - **SavedOutfit**: `name, itemIds[], favorite, createdAt, updatedAt`.
-- **TransportLeg**: `direction` (outbound/return), `mode` (fly, drive, train, boat), dates/times, `from/to` points with coordinates, `carrier, identifier, bookingRef`, `connections[]` (stops with arrive/depart date+time, carrier, identifier, coordinates), `needsAttention?`. A booking is split into individual legs at display time (`legSegments`).
+- **TransportLeg**: `direction` (outbound/return), `mode` (fly, drive, train, boat), dates/times, `from/to` points with coordinates, `carrier, identifier, bookingRef`, `connections[]` (stops with arrive/depart date+time, carrier, identifier, coordinates), `needsAttention?`, `placeholder?` (a suggested hop not yet filled in; created by `refreshPlaceholders` from the trip's destinations, replaced when destinations or dates change, never touching real bookings, cleared on save). A booking is split into individual legs at display time (`legSegments`).
 - **TripLodging**, **ScheduledActivity**: stays and activities per trip/day; `TripLodging.needsAttention?`.
 - **GeneralItem**: `name, qty | perDay, isDefault` (the *Default* tag), `tags[]` (trip types + custom), `category` (Toiletries, Electronics, …), `emoji?, photo?`.
-- **TrashEntry**: `kind` (trip, closetItem, generalItem), `name, deletedAt, data` (a snapshot: a whole trip with its rows; a closet item with the outfits, saved outfits and packing rows it was removed from).
+- **TrashEntry**: `kind` (trip, closetItem, savedOutfit, generalItem), `name, deletedAt, data` (a snapshot: a whole trip with its rows; a closet item with the outfits, saved outfits and packing rows it was removed from).
 
 All temperatures are stored in °C and converted for display (`src/lib/units.ts`).
 
@@ -268,7 +269,7 @@ Backups from a **newer** version are rejected with a clear message. Both migrati
 
 ### 6.5 Integrity rules
 
-- Deleting a closet item removes it from trip outfits, saved outfits and packing rows (`deleteClosetItem`, one transaction) after recording where it was used. Deleting a trip removes its days, outfits, packing rows, transport, activities and lodging (`deleteTrip`). Both, and `deleteGeneralItem`, first write a snapshot to `trash`.
+- Deleting a closet item removes it from trip outfits, saved outfits and packing rows (`deleteClosetItem`, one transaction) after recording where it was used. Deleting a trip removes its days, outfits, packing rows, transport, activities and lodging (`deleteTrip`). Both, `deleteSavedOutfit` and `deleteGeneralItem` first write a snapshot to `trash`.
 - `restoreFromTrash` re-inserts rows with their original ids, puts a closet item back into the outfits / saved outfits / packing rows that still exist, and re-syncs packing. `purgeExpiredTrash` (run at startup and when the Trash page opens) deletes entries older than 30 days (`TRASH_DAYS`). "Clear samples" bypasses the trash.
 - The trash is not in `TABLE_NAMES`, so it is excluded from backups and the data file; `importDatabase` clears it, because restored ids would no longer match.
 - Packing rows for closet items are reconciled with outfits after every outfit change (`syncPacking`). Existing rows, and their checkmarks, are kept.
@@ -485,9 +486,10 @@ Repository setting: *Settings → Pages → Source = GitHub Actions*. With "Depl
 | `src/features/closet/closetScopes.test.ts` | 3 | Tab scopes (clothing / shoes / accessories / general), filters, sorting, grouping |
 | `src/engine/sleepwear.test.ts`, `src/engine/rules.test.ts` | 4 + 2 | Sleepwear sets and swaps; new weather tags, Work, one-piece |
 | `src/features/packing/generalItems.test.ts` | 5 | Default general items on new trips, categories, sleepwear fill, travel days, date-change proposals and flags |
-| `src/features/trash/trash.test.ts` | 3 | Trip and closet-item restore, general items, 30-day expiry, samples bypass the trash |
+| `src/features/trash/trash.test.ts` | 4 | Trip and closet-item restore, general items, 30-day expiry, samples bypass the trash |
 | `src/lib/emoji.test.ts` | 1 | Emoji suggestions |
-| **Total** | **108** | All passing |
+| `src/features/trips/placeholders.test.ts` | 3 | Placeholder hops for single / multi-stop trips, regeneration after editing stops, real bookings untouched |
+| **Total** | **112** | All passing |
 
 The network is always mocked; no test calls Open-Meteo.
 

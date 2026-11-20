@@ -34,7 +34,7 @@ function SavedOutfitCard({ outfit, closet }: { outfit: SavedOutfit; closet: Map<
         />
         <button
           className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700"
-          onClick={() => confirm(`Delete saved outfit "${outfit.name}"?`) && deleteSavedOutfit(outfit.id!)}
+          onClick={() => confirm(`Delete saved outfit "${outfit.name}"? You can restore it from the Trash for 30 days.`) && deleteSavedOutfit(outfit.id!)}
           aria-label={`Delete ${outfit.name}`}
         >
           <Icon name="trash" />
