@@ -355,3 +355,29 @@ export interface ScheduledActivity {
   outfitId?: number;       // linked outfit for this activity
   createdAt: number;
 }
+
+/** How long deleted trips and items stay in the trash before being removed for good. */
+export const TRASH_DAYS = 30;
+
+export interface TripSnapshot {
+  trip: Trip;
+  days: TripDay[];
+  outfits: Outfit[];
+  packingItems: PackingItem[];
+  transport: TransportLeg[];
+  activities: ScheduledActivity[];
+  lodging: TripLodging[];
+}
+
+/** A closet item plus where it was used, so restoring puts it back into those outfits and lists. */
+export interface ClosetItemSnapshot {
+  item: ClosetItem;
+  savedOutfitIds: number[];
+  outfits: { id: number; locked: boolean }[];
+  packingItems: PackingItem[];
+}
+
+export type TrashEntry =
+  | { id?: number; kind: 'trip'; name: string; deletedAt: number; data: TripSnapshot }
+  | { id?: number; kind: 'closetItem'; name: string; deletedAt: number; data: ClosetItemSnapshot }
+  | { id?: number; kind: 'generalItem'; name: string; deletedAt: number; data: { item: GeneralItem } };

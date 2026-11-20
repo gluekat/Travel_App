@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useRoute } from './lib/router';
 import { IS_DEV_CHANNEL } from './lib/channel';
 import { Icon } from './components/ui';
@@ -11,10 +11,15 @@ import { TripDetail } from './features/trips/TripDetail';
 import { PackingPage } from './features/packing/PackingPage';
 import { ItineraryPage } from './features/trips/ItineraryPage';
 import { TripClosetPage } from './features/trips/TripClosetPage';
+import { TrashPage } from './features/trash/TrashPage';
+import { purgeExpiredTrash } from './features/trash/trashService';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from './db/schema';
 
 const NAV = [
   { path: 'closet', label: 'Closet', icon: 'shirt' },
   { path: 'trips', label: 'Trips', icon: 'map' },
+  { path: 'trash', label: 'Trash', icon: 'trash' },
   { path: 'settings', label: 'Data & privacy', icon: 'gear' },
 ] as const;
 
@@ -22,6 +27,7 @@ function Page({ route }: { route: string[] }): ReactNode {
   const [section = 'trips', id, sub, sub2] = route;
   if (section === 'closet') return <ClosetPage view={isClosetView(id) ? id : 'items'} />;
   if (section === 'settings') return <SettingsPage />;
+  if (section === 'trash') return <TrashPage />;
   if (section === 'trips' && id) {
     const tripId = Number(id);
     if (sub === 'packing') return <PackingPage tripId={tripId} />;
@@ -35,6 +41,10 @@ function Page({ route }: { route: string[] }): ReactNode {
 export function App() {
   const route = useRoute();
   const section = route[0] ?? 'trips';
+  const trashCount = useLiveQuery(() => db.trash.count(), []);
+  useEffect(() => {
+    void purgeExpiredTrash();
+  }, []);
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="no-print sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -60,6 +70,7 @@ export function App() {
               >
                 <Icon name={n.icon} />
                 <span className="hidden sm:inline">{n.label}</span>
+                {n.path === 'trash' && !!trashCount && <span className="rounded-full bg-slate-200 px-1.5 text-[11px] text-slate-700">{trashCount}</span>}
               </a>
             ))}
           </nav>

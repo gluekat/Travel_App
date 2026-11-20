@@ -7,7 +7,7 @@
 | **Default (development) branch** | `claude/packwise-travel-app-m5rq30` |
 | **Release branch** | `release` |
 | **Version** | 0.1.0 (pre-release; see `SECURITY.md`) |
-| **Document state** | Updated 2026-11-13 (dependency patching) |
+| **Document state** | Updated 2026-11-20 (itinerary, closet tabs, trash; see also `docs/CHANGES.md`) |
 | **Audience** | Project auditor; future developers |
 
 This document records what PackWise is, how it is built, the decisions behind it, how data and privacy are handled, how it is tested and released, and its known limitations. Section 15 is a checklist for the auditor. File references are relative to the repository root.
@@ -45,11 +45,11 @@ PackWise helps a traveller decide what to wear and pack. The user enters their w
 **Design principles**, fixed at the start of the project and kept since:
 
 - **Local-first and private.** No backend, accounts, analytics, cloud database or cloud file storage. All user data stays on the user's device.
-- **Minimal network use.** The only outbound requests are to the free Open-Meteo weather and geocoding APIs. They carry a place name, or coordinates plus a date range, and nothing else.
+- **Minimal network use.** The only outbound requests are to the free Open-Meteo weather and geocoding APIs (a place name, or coordinates plus a date range) and to OpenStreetMap Nominatim for address, activity-place and airport search (the text the user typed). Nothing else.
 - **Works offline.** The app is installable (PWA) and loads with no network.
 - **Replaceable intelligence.** Outfit logic is a pure, rules-based module behind a typed interface, so an LLM-based engine can be swapped in later.
 
-**Out of scope** (by original specification): cloud sync, accounts, shopping recommendations, social sharing, laundry planning, image recognition, multi-traveller trips. Native mobile apps were also out of scope; see §16 for their current status.
+**Out of scope** (by original specification; laundry planning has since been added at the owner's request): cloud sync, accounts, shopping recommendations, social sharing, image recognition, multi-traveller trips. Native mobile apps were also out of scope; see §16 for their current status.
 
 ---
 
@@ -93,6 +93,15 @@ PackWise helps a traveller decide what to wear and pack. The user enters their w
 | 10-16 | Data must survive clearing browser data | Linked data file (§11.1) **and** desktop app (§11.2), as chosen by the owner |
 | 10-16 | Fix the Azure deployment workflow | Owner chose GitHub Pages (§12.2) |
 | 10-17 | Stable public version alongside the dev version | `release` branch → `/Travel_App/`; dev → `/Travel_App/dev/` (§12.3) |
+| 11-14 → 11-20 | Itinerary page: transportation, lodging, scheduled activities, print | `ItineraryPage.tsx`, `TransportSection.tsx`, `transportPlan.ts`; tables `tripTransport`, `tripActivities`, `tripLodging` (§6.2) |
+| 11-14 → 11-20 | Transportation per leg: layovers, drive estimates, one-way / return / round trip, airport search, cruises, daily travel summaries | `transportPlan.ts` (pure, tested), `src/lib/airports.ts`, `LocationInput` airport mode |
+| 11-14 → 11-20 | Day locations and weather follow transport; weather for both ends of a travel day, each editable | `dayPlaces.ts`, `tripWeather.ts`, `useWeatherSync.ts`; `TripDay.weatherFrom`, `DayWeather.placeKey` |
+| 11-14 → 11-20 | Confirm lodging/transport date changes; flag declined ones | `tripAdjustments.ts`, `needsAttention` on lodging and legs |
+| 11-15 → 11-20 | Laundry days, per-day wear counts and warnings, shared by Overview and Packing | `wearPlan.ts`, `DayCard.tsx`, `PackingPage.tsx` |
+| 11-15 → 11-20 | Sleepwear from pajamas (top+bottom or one-piece; shoes/accessories as variants) | `src/engine/sleepwear.ts`, `Outfit.sleepwear` |
+| 11-17 → 11-20 | Closet tabs (Items, Clothing, Shoes, Accessories, General, Outfits); one add/edit form for all kinds; general packing items with categories, tags, emoji/photo and Default tag | `closetScopes.ts`, `ItemEditor.tsx`, `GeneralItemForm.tsx`, `generalItemsService.ts`; table `generalItems` |
+| 11-20 | Item details: warmth N/A, size, material, notes, accessory type, one-piece category, more weather tags, Work activity | `ClosetItem` fields; engine treats warmth 0 as neutral |
+| 11-20 | Trash: deleted trips, closet items and general items kept 30 days | `trash` table, `trashService.ts`, `TrashPage.tsx` |
 
 ---
 
@@ -165,7 +174,7 @@ src/
                        TagInput, ClosetPicker, ItemThumb, OfflineBanner, SyncBanner
   db/
     types.ts           Data model (all entities)
-    schema.ts          Dexie schema v1→v3, cascade deletes
+    schema.ts          Dexie schema v1→v8, cascade deletes, trash-on-delete
     migrate.ts         Data migrations, shared by schema upgrade and backup import
     backup.ts          Export / import (JSON, photos as base64)
     seed.ts            Sample wardrobe
@@ -175,19 +184,22 @@ src/
     rules.ts           Warmth bands, rain rule, occasions, formality, slots, scoring
     suggest.ts         suggestOptions, planTrip, rankSavedOutfits, swapCandidates, gaps
     packing.ts         Copies to pack, stats, general item quantities
+    sleepwear.ts       Pajama-only sleepwear sets and swaps
   features/
-    closet/            Items + saved outfits (ClosetPage, ItemForm, PhotoInput, …)
-    trips/             Trip list, trip overview, day cards, weather, place search
+    closet/            Tabs and lists (ClosetPage, closetScopes), ItemEditor / ItemForm / GeneralItemForm, saved outfits
+    trips/             Trip list, overview, day cards, Itinerary + TransportSection, transportPlan, dayPlaces,
+                       wearPlan, tripAdjustments, weather summary, place search
     outfits/           OutfitCard, SuggestPanel, outfitService (engine ↔ DB glue)
-    packing/           Packing Checklist page
+    packing/           Packing Checklist page, general items service
+    trash/             Trash page and restore/purge service
     settings/          Data & privacy page, data-file panel, privacy note
-  lib/                 dates, units (°C/°F), hooks, router, image resize, channel, csp
+  lib/                 dates, units (°C/°F), hooks, router, image resize, channel, csp, airports, emoji
   storage/             Data-file sync (browser + desktop adapters), meta DB, reminders
   weather/             Open-Meteo client, fallback chain, WMO codes, persistence
 src-tauri/             Desktop app (Rust shell, config, capabilities, icons)
 ```
 
-The application code is about 6,000 lines of TypeScript/TSX, tests included.
+The application code is about 11,500 lines of TypeScript/TSX, tests included.
 
 ---
 
@@ -201,7 +213,7 @@ The application code is about 6,000 lines of TypeScript/TSX, tests included.
 | `packwise-meta` | Sync bookkeeping: linked file handle, timestamps, reminder snooze | **No** (by design) |
 | `packwise-dev`, `packwise-meta-dev` | Same, for the dev-preview build only (§12.3) | Yes / No |
 
-### 6.2 Tables (`src/db/schema.ts`, schema version 3)
+### 6.2 Tables (`src/db/schema.ts`, schema version 8)
 
 | Table | Primary key and indexes | Holds |
 |---|---|---|
@@ -211,16 +223,25 @@ The application code is about 6,000 lines of TypeScript/TSX, tests included.
 | `tripDays` | `++id, tripId, [tripId+date]` | Activities and cached weather per day |
 | `outfits` | `++id, tripId, tripDayId, [tripDayId+rank]` | Outfits chosen for a trip day |
 | `packingItems` | `++id, tripId, itemId, [tripId+itemId]` | Checklist rows (closet item or general item) |
-| `settings` | `key` | e.g. `tempUnit`, `lastExportAt`, `seeded` |
+| `settings` | `key` | e.g. `tempUnit`, `lastExportAt`, `seeded`, `homeLocation`, `homeAirport`, `generalLibrarySeeded` |
+| `tripTransport` | `++id, tripId, direction, mode` | Transport bookings (a booking may hold several legs via `connections`) |
+| `tripActivities` | `++id, tripId, tripDayId` | Scheduled activities |
+| `tripLodging` | `++id, tripId, checkInDate` | Lodging stays |
+| `generalItems` | `++id, isDefault, *tags` | Reusable general packing items |
+| `trash` | `++id, kind, deletedAt` | Deleted trips / items with a snapshot of what they referenced. **Not exported** (§6.5) |
 
 ### 6.3 Main entities (`src/db/types.ts`)
 
-- **ClosetItem**: `name, category` (top, bottom, dress, outerwear, shoes, accessory, swimwear, activewear), `color, warmth` (1–5), `formality` (casual, smart casual, formal), `weatherTags[]` (rain-ready, sun, cold, hot), `activities[]`, `quantity` (copies owned), `wearCount` (wears before washing), `favorite` (0–5), `customTags[]`, `photo?` (JPEG Blob ≤800 px), `isSample, createdAt, updatedAt`.
+- **ClosetItem**: `name, category` (top, bottom, dress, one-piece, outerwear, shoes, accessory, swimwear, activewear, underwear, pajamas), `subcategory?` (top, bottom, one-piece, shoes, accessories), `accessoryType?`, `color, warmth` (0 = not applicable, else 1–5), `formality` (casual, smart casual, formal), `weatherTags[]` (rain-ready, sun, hot, warm, mild, cool, chilly, cold, snow, windy), `size?, material?, notes?`, `activities[]`, `quantity` (copies owned), `wearCount` (wears before washing), `favorite` (0–5), `customTags[]`, `photo?` (JPEG Blob ≤800 px), `isSample, createdAt, updatedAt`.
 - **Trip**: `destination, placeLabel?, lat?, lon?, timezone?, startDate, endDate` (ISO `YYYY-MM-DD`). Maximum 30 days.
-- **TripDay**: `tripId, date, activities[], weather?` where `weather = { high, low (°C), precipChance (0–100), code?, condition, source: 'forecast'|'historical'|'manual', fetchedAt }`.
+- **TripDay**: `tripId, date, activities[], weather?` where `weather = { high, low (°C), precipChance (0–100), code?, condition, source: 'forecast'|'historical'|'manual', fetchedAt, placeKey? }`. Also `weatherFrom?` (weather where a travel day starts), `laundryDay?, laundryItems[]`, and `activities[]` (the first and last day carry `travel day`).
 - **Outfit**: `tripId, tripDayId, rank, label, activities?, itemIds[], lockedItemIds[], rationale`.
 - **PackingItem**: `tripId, packed`, plus either `itemId` (closet item; copies computed from outfits) or `customLabel` with `qty` or `perDay` (general item).
 - **SavedOutfit**: `name, itemIds[], favorite, createdAt, updatedAt`.
+- **TransportLeg**: `direction` (outbound/return), `mode` (fly, drive, train, boat), dates/times, `from/to` points with coordinates, `carrier, identifier, bookingRef`, `connections[]` (stops with arrive/depart date+time, carrier, identifier, coordinates), `needsAttention?`. A booking is split into individual legs at display time (`legSegments`).
+- **TripLodging**, **ScheduledActivity**: stays and activities per trip/day; `TripLodging.needsAttention?`.
+- **GeneralItem**: `name, qty | perDay, isDefault` (the *Default* tag), `tags[]` (trip types + custom), `category` (Toiletries, Electronics, …), `emoji?, photo?`.
+- **TrashEntry**: `kind` (trip, closetItem, generalItem), `name, deletedAt, data` (a snapshot: a whole trip with its rows; a closet item with the outfits, saved outfits and packing rows it was removed from).
 
 All temperatures are stored in °C and converted for display (`src/lib/units.ts`).
 
@@ -231,6 +252,13 @@ All temperatures are stored in °C and converted for display (`src/lib/units.ts`
 | 1 | MVP | — |
 | 2 | `quantity`, `wearCount`; outfits are user-chosen only; general packing items | `migrateV1toV2`: defaults 1/1; drop unselected suggestions and the `selected` field; renumber ranks; give every day an empty outfit; add the default general items to each trip |
 | 3 | `favorite`, `customTags`, `savedOutfits` table | `migrateV2toV3`: defaults 0 / [] |
+| 4 | Itinerary: `tripTransport`, `tripActivities` | New tables only (`migrateV3toV4`) |
+| 5 | `tripLodging` | New table |
+| 6 | `generalItems` | New table; seeded lazily (`ensureGeneralLibrary`, once, from the old default items) |
+| 7 | First and last day of each trip are travel days | Dexie `upgrade()` adds `travel day` to those days |
+| 8 | `trash` | New table; not part of backups |
+
+New optional fields (e.g. `size`, `accessoryType`, `weatherFrom`, `needsAttention`, `placeKey`) need no migration. `CURRENT_DATA_VERSION` in `migrate.ts` (backup format) is still 4: later versions only add tables or optional fields, and missing tables import as empty.
 
 The same migration functions run in two places:
 1. Dexie `version(n).upgrade()`, when an existing browser database is opened by a newer app.
@@ -240,8 +268,9 @@ Backups from a **newer** version are rejected with a clear message. Both migrati
 
 ### 6.5 Integrity rules
 
-- Deleting a closet item removes it from trip outfits, saved outfits and packing rows (`deleteClosetItem`, one transaction).
-- Deleting a trip removes its days, outfits and packing rows (`deleteTrip`).
+- Deleting a closet item removes it from trip outfits, saved outfits and packing rows (`deleteClosetItem`, one transaction) after recording where it was used. Deleting a trip removes its days, outfits, packing rows, transport, activities and lodging (`deleteTrip`). Both, and `deleteGeneralItem`, first write a snapshot to `trash`.
+- `restoreFromTrash` re-inserts rows with their original ids, puts a closet item back into the outfits / saved outfits / packing rows that still exist, and re-syncs packing. `purgeExpiredTrash` (run at startup and when the Trash page opens) deletes entries older than 30 days (`TRASH_DAYS`). "Clear samples" bypasses the trash.
+- The trash is not in `TABLE_NAMES`, so it is excluded from backups and the data file; `importDatabase` clears it, because restored ids would no longer match.
 - Packing rows for closet items are reconciled with outfits after every outfit change (`syncPacking`). Existing rows, and their checkmarks, are kept.
 
 ### 6.6 Backup file format
@@ -262,15 +291,16 @@ Blobs are encoded as `{ "__blob": true, "type": "image/jpeg", "data": "<base64>"
 | Closet items, photos, saved outfits | IndexedDB; optional data file on the user's disk | **Never** |
 | Trips, activities, outfits, checklist | Same | **Never** |
 | Destination name (as typed) | Sent to `geocoding-api.open-meteo.com` | Yes, only when the user presses **Find** |
+| Search text for addresses, activity places and airports | Sent to `nominatim.openstreetmap.org` (`src/weather/photon.ts`); the airport search tries a built-in list (`src/lib/airports.ts`) first | Yes, only the text typed (plus a coarse viewbox around the trip for activity places) |
 | Coordinates + date range | Sent to `api.open-meteo.com` / `archive-api.open-meteo.com` | Yes, to fetch weather |
 
 Controls in place:
 
-- All `fetch` calls are in one file: `src/weather/openMeteo.ts`. A unit test asserts that weather requests carry **only** `latitude, longitude, daily, timezone, start_date, end_date`.
+- Weather and geocoding `fetch` calls are in `src/weather/openMeteo.ts`; place searches are in `src/weather/photon.ts` (Nominatim, listed in the CSP). A unit test asserts that weather requests carry **only** `latitude, longitude, daily, timezone, start_date, end_date`.
 - The service worker has no runtime caching rules for external requests. Weather is cached by the app in IndexedDB.
 - No fonts, scripts or icons are loaded from CDNs. Icons are inline SVG; fonts are the system stack.
-- **Desktop app:** a Content Security Policy (`src-tauri/tauri.conf.json`) restricts `connect-src` to the three Open-Meteo hosts (plus Tauri IPC). File access is limited by capability scope to `$DOCUMENT/PackWise/**` and `$APPDATA/**` (`src-tauri/capabilities/default.json`).
-- **Web app:** the same restriction is enforced by a Content Security Policy `<meta>` tag injected at build time (`src/lib/csp.ts`, `vite.config.ts`). Only same-origin scripts, styles and workers are allowed (no inline code). Network requests may go only to the three Open-Meteo origins, which are derived from the weather client's own URLs. A `no-referrer` policy stops the page URL being sent to Open-Meteo. A test (`src/lib/csp.test.ts`) keeps the web and desktop policies in step.
+- **Desktop app:** a Content Security Policy (`src-tauri/tauri.conf.json`) restricts `connect-src` to the three Open-Meteo hosts and Nominatim (plus Tauri IPC). File access is limited by capability scope to `$DOCUMENT/PackWise/**` and `$APPDATA/**` (`src-tauri/capabilities/default.json`).
+- **Web app:** the same restriction is enforced by a Content Security Policy `<meta>` tag injected at build time (`src/lib/csp.ts`, `vite.config.ts`). Only same-origin scripts, styles and workers are allowed (no inline code). Network requests may go only to the three Open-Meteo origins (derived from the weather client's own URLs) and Nominatim. A `no-referrer` policy stops the page URL being sent to Open-Meteo. A test (`src/lib/csp.test.ts`) keeps the web and desktop policies in step.
 - **Web hosting:** GitHub Pages serves only static files. It receives standard web-server request data (e.g. IP address) when a user loads the app, as any website does. It receives no user content.
 - The privacy statement is shown in-app (*Data & privacy* page, trip screens) and in `README.md`.
 
@@ -288,6 +318,8 @@ Controls in place:
 4. **Missing:** no data at all. The UI shows a manual entry form (high, low, rain %), stored with `source: 'manual'`.
 
 **Labels shown:** *Live forecast* (fetched within 3 h and online), *Cached forecast*, *Historical average* (or *(cached)*), *Manual entry*. An offline banner appears when the browser reports no network.
+
+**Where the weather applies.** `dayPlaces.ts › computeDayPlaces` gives each day a place: with transport legs it is where the traveller ends the day (the destination of the latest leg that has arrived; the origin before the first arrival), and a day that changes place reads "From → To" and also records the starting place. Legs without coordinates fall back to the trip destination or stop. `refreshTripWeather` groups days by rounded coordinates (`placeKey`), fetches once per place, and stores `weather` (where the day ends) and `weatherFrom` (where a travel day starts). `weatherNeedsPlaceRefresh` marks weather fetched for another place as stale (manual entries are never considered stale), and `useWeatherSync` / the overview refresh it. Every set of weather can be edited by hand.
 
 **Refresh policy:** when a trip opens, weather is fetched automatically if any day is missing data or the newest fetch is older than 3 hours. A **Refresh weather** button fetches on demand.
 
@@ -355,6 +387,8 @@ To replace the engine, implement `OutfitEngine` (`src/engine/types.ts`) and rout
 
 **File:** `src/engine/packing.ts`, UI in `src/features/packing/PackingPage.tsx`.
 
+- **Warnings and laundry** are computed once in `src/features/trips/wearPlan.ts` (`computeOverWorn`, `weatherMismatches`) and shown identically on the Overview and the Packing Checklist. Wears are counted once per day per item; laundry days reset the count; items with unlimited wear are skipped. Forecast warnings can be cleared per trip (`Trip.dismissedForecast`).
+- **General items** on the checklist come from the `generalItems` list: *Default* items are added to every new trip, rows are sorted by category then name.
 - **Copies to pack** per item = `min(quantity, ceil(planned wears ÷ wearCount))`. If planned wears exceed `quantity × wearCount`, the shortfall is shown ("pack more or plan laundry").
 - **General items** (underwear, socks, jacket, toiletries by default, plus user-added items) have either a fixed quantity or a **per-day** quantity: `perDay × trip days`.
 - **Stats:** total pieces (clothing copies + general quantities), "N outfits from M clothing pieces", and *mix-and-match* = average wears per packed piece.
@@ -444,9 +478,16 @@ Repository setting: *Settings → Pages → Source = GitHub Actions*. With "Depl
 | `src/engine/suggest.test.ts` | 37 | Warmth bands, formality, occasions; heat/cold/rain (>50% vs exactly 50%); beach; distinct options; locks and conflicts; no consecutive repeats; wear capacity and its gaps; favourites (preferred, but never over weather); saved-outfit ranking; swaps; packing copies/shortfall/stats; general quantities |
 | `src/weather/resolveWeather.test.ts` | 12 | Forecast window, Feb 29 shifting, live → historical → cached → missing chain, straddling the window, HTTP errors, **request parameters limited to coords and dates**, source labels, geocoding |
 | `src/storage/fileSync.test.ts` | 15 | Reconcile decision table; file parsing; **"clear browser data → reopen file → everything restored"**; conflict (keep file / keep browser); write errors; reminder rules |
-| `src/lib/csp.test.ts` | 3 | Web CSP allows connections only to self + Open-Meteo; no inline or remote scripts/styles; web and desktop CSP list the same hosts |
+| `src/lib/csp.test.ts` | 3 | Web CSP allows connections only to self, Open-Meteo and Nominatim; no inline or remote scripts/styles; web and desktop CSP list the same hosts |
 | `src/db/backup.test.ts` | 11 | Export/import round trip incl. photo Blobs; rejects foreign/newer files; weather cache survives failed refresh; manual and multi-outfit editing; fill-empty-days; packing sync keeps checkmarks; saved outfits; custom tag index; **v1 backup import and real v1 database upgrade** |
-| **Total** | **78** | All passing |
+| `src/features/trips/transportPlan.test.ts` | 9 | Legs from connections, overnight and separate-booking layovers, drive estimates, overview, cruises, per-connection airline, trip date shifts, round-trip mirroring, travel-day summaries |
+| `src/features/trips/dayPlaces.test.ts` | 3 | Daily places from transport legs, fallbacks, stale-weather rules incl. travel days and manual entries |
+| `src/features/closet/closetScopes.test.ts` | 3 | Tab scopes (clothing / shoes / accessories / general), filters, sorting, grouping |
+| `src/engine/sleepwear.test.ts`, `src/engine/rules.test.ts` | 4 + 2 | Sleepwear sets and swaps; new weather tags, Work, one-piece |
+| `src/features/packing/generalItems.test.ts` | 5 | Default general items on new trips, categories, sleepwear fill, travel days, date-change proposals and flags |
+| `src/features/trash/trash.test.ts` | 3 | Trip and closet-item restore, general items, 30-day expiry, samples bypass the trash |
+| `src/lib/emoji.test.ts` | 1 | Emoji suggestions |
+| **Total** | **108** | All passing |
 
 The network is always mocked; no test calls Open-Meteo.
 
@@ -521,6 +562,10 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 | L11 | Historical averages use 3 years and ±3 days | Coarse for unusual seasons | Configurable window |
 | L12 | No internationalisation; English only. Accessibility uses labels/roles but has not been formally audited | — | WCAG review |
 | L13 | Dev and stable share browser quota and service-worker registry on one origin | Minor | Separate domain if needed |
+| L14 | Layover and duration times use the entered clock times and ignore time zones | Long-haul durations can be off by the zone difference | Store IANA time zones per airport |
+| L15 | Airport search relies on a built-in list of ~170 major airports plus Nominatim for others; drive times are estimates (straight line × 1.3 at 60 mph) | Rural airports may need typing by hand; real routing differs | Larger offline dataset; a routing API (would add a network host) |
+| L16 | The trash is not backed up or synced to the data file, and a backup import empties it | Deleted items can't be recovered after an import | Include the trash in backups with blobs encoded |
+| L17 | Daily place logic uses the legs' own coordinates; places typed without choosing a search result have none | Those days fall back to the trip destination | Geocode typed places on save |
 
 ---
 
@@ -540,12 +585,15 @@ Headless-Chromium scripts were run against production builds at each milestone. 
 | 2026-10-19 | — | Development documentation + user manual |
 | 2026-10-19 | — | Web Content Security Policy + no-referrer; Dependabot configuration and `glib` risk acceptance |
 | 2026-11-13 | `e797ee2` | Patched high-severity vulns (vite, undici, fast-uri, serialize-javascript); fixed Vite native-config-loader import warnings; documented workbox-build transitive advisories as accepted build-tool risk |
+| 2026-11-14 → 11-20 | `83c262b` … `e9af294` | Itinerary page and transportation rework; laundry, wear counts, sleepwear; closet tabs, general items, item details; weather and location following transport; trash. Schema v4 → v8; tests 78 → 108. Summary in `docs/CHANGES.md` |
 
 Decisions and the reasons for them:
 - **Hash routing:** static hosting with no rewrites, and simple offline support.
 - **Pure engine with seeded jitter:** testable, reproducible, swappable.
 - **Data file in export format:** one format to validate and migrate; any data file doubles as a backup.
 - **Separate meta database:** file handles can't be serialised and must never appear in backups.
+- **Trash as snapshots:** deletes stay simple cascades; the trash stores a snapshot with original ids, so restore needs no merge logic and the live tables never carry "deleted" flags.
+- **Shared wear/warning logic:** one module feeds both the Overview and the Packing Checklist so their warnings cannot disagree.
 - **Promote by fast-forward only:** stable is always a known dev commit, and history is never rewritten.
 
 ---

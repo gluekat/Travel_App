@@ -388,7 +388,7 @@ export function TripDetail({ tripId }: { tripId: number }) {
           <Button
             variant="danger"
             onClick={async () => {
-              if (confirm('Delete this trip, its outfits and packing checklist?')) {
+              if (confirm('Delete this trip, its outfits and packing checklist? You can restore it from the Trash for 30 days.')) {
                 await deleteTrip(tripId);
                 navigate('/trips');
               }

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteClosetItem } from '../../db/schema';
-import { ACCESSORY_TYPES, ACTIVITIES, CATEGORIES, WEATHER_TAGS, type ClosetItem } from '../../db/types';
+import { TRASH_DAYS, ACCESSORY_TYPES, ACTIVITIES, CATEGORIES, WEATHER_TAGS, type ClosetItem } from '../../db/types';
 import { clearSampleItems, seedSampleWardrobe } from '../../db/seed';
 import { Stars } from '../../components/Stars';
 import { Tabs } from '../../components/Tabs';
 import { Button, Chip, Icon, inputClass } from '../../components/ui';
 import { ItemThumb } from '../../components/ItemThumb';
 import { SavedOutfitsView } from './SavedOutfitsView';
-import { GeneralItemCard, GeneralItemsView, ItemEditorModal, deleteGeneralItem } from './GeneralItemsView';
+import { GeneralItemCard, GeneralItemsView, ItemEditorModal, confirmDeleteGeneralItem } from './GeneralItemsView';
 import type { EditorTarget } from './ItemEditor';
 import { ensureGeneralLibrary } from '../packing/generalItemsService';
 import { groupEntries, inScope, isAccessory, isClothing, isShoes, matchesFilters, sortEntries, type Entry, type GroupBy, type Scope, type SortKey } from './closetScopes';
@@ -51,7 +51,7 @@ const SCOPE_TEXT: Record<Scope, { empty: string; addCategory?: ClosetItem['categ
 
 function ClosetItemCard({ item, onEdit, onTag }: { item: ClosetItem; onEdit: () => void; onTag: (t: string) => void }) {
   async function remove() {
-    if (item.id != null && confirm(`Delete "${item.name}"? It will also be removed from trip and saved outfits.`)) await deleteClosetItem(item.id);
+    if (item.id != null && confirm(`Delete "${item.name}"? It is removed from trip and saved outfits too, and can be restored from the Trash for ${TRASH_DAYS} days.`)) await deleteClosetItem(item.id);
   }
   async function duplicate() {
     const { id: _id, ...rest } = item;
@@ -232,7 +232,7 @@ function ItemsView({ scope }: { scope: Scope }) {
         </div>
       </div>
 
-      {closetItems && entries.length === 0 && (
+      {closetItems && (scope === 'all' ? closetItems.length === 0 : entries.length === 0) && (
         <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">
           {text.empty}
           {scope === 'all' && (
@@ -260,7 +260,7 @@ function ItemsView({ scope }: { scope: Scope }) {
               e.kind === 'closet' ? (
                 <ClosetItemCard key={`c${e.item.id}`} item={e.item} onEdit={() => setEditing({ kind: 'closet', item: e.item })} onTag={setTag} />
               ) : (
-                <GeneralItemCard key={`g${e.item.id}`} item={e.item} onEdit={() => setEditing({ kind: 'general', item: e.item })} onDelete={() => void deleteGeneralItem(e.item)} onTag={setTag} />
+                <GeneralItemCard key={`g${e.item.id}`} item={e.item} onEdit={() => setEditing({ kind: 'general', item: e.item })} onDelete={() => void confirmDeleteGeneralItem(e.item)} onTag={setTag} />
               ),
             )}
           </ul>

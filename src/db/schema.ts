@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { STORAGE_SUFFIX } from '../lib/channel';
 import { migrateV1toV2, migrateV2toV3, type Tables } from './migrate';
-import type { ClosetItem, GeneralItem, Outfit, PackingItem, SavedOutfit, ScheduledActivity, Setting, TransportLeg, Trip, TripDay, TripLodging } from './types';
+import type { ClosetItem, GeneralItem, Outfit, TrashEntry, PackingItem, SavedOutfit, ScheduledActivity, Setting, TransportLeg, Trip, TripDay, TripLodging } from './types';
 
 export class PackWiseDB extends Dexie {
   closetItems!: EntityTable<ClosetItem, 'id'>;
@@ -15,6 +15,7 @@ export class PackWiseDB extends Dexie {
   tripActivities!: EntityTable<ScheduledActivity, 'id'>;
   tripLodging!: EntityTable<TripLodging, 'id'>;
   generalItems!: EntityTable<GeneralItem, 'id'>;
+  trash!: EntityTable<TrashEntry, 'id'>;
 
   constructor(name = 'packwise') {
     super(name);
@@ -76,6 +77,10 @@ export class PackWiseDB extends Dexie {
           }
         }
       });
+    // v8: the trash — deleted trips and items, kept for 30 days. Not part of backups.
+    this.version(8).stores({
+      trash: '++id, kind, deletedAt',
+    });
   }
 }
 
@@ -105,9 +110,26 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   await db.settings.put({ key, value });
 }
 
-/** Delete a trip and everything hanging off it. */
+/** Delete a trip and everything hanging off it. It goes to the trash for 30 days. */
 export async function deleteTrip(tripId: number): Promise<void> {
-  await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.tripTransport, db.tripActivities, db.tripLodging], async () => {
+  await db.transaction('rw', [db.trips, db.tripDays, db.outfits, db.packingItems, db.tripTransport, db.tripActivities, db.tripLodging, db.trash], async () => {
+    const trip = await db.trips.get(tripId);
+    if (trip) {
+      await db.trash.add({
+        kind: 'trip',
+        name: trip.name ?? trip.placeLabel ?? trip.destination,
+        deletedAt: Date.now(),
+        data: {
+          trip,
+          days: await db.tripDays.where('tripId').equals(tripId).toArray(),
+          outfits: await db.outfits.where('tripId').equals(tripId).toArray(),
+          packingItems: await db.packingItems.where('tripId').equals(tripId).toArray(),
+          transport: await db.tripTransport.where('tripId').equals(tripId).toArray(),
+          activities: await db.tripActivities.where('tripId').equals(tripId).toArray(),
+          lodging: await db.tripLodging.where('tripId').equals(tripId).toArray(),
+        },
+      });
+    }
     await db.tripDays.where('tripId').equals(tripId).delete();
     await db.outfits.where('tripId').equals(tripId).delete();
     await db.packingItems.where('tripId').equals(tripId).delete();
@@ -118,9 +140,26 @@ export async function deleteTrip(tripId: number): Promise<void> {
   });
 }
 
-/** Delete a closet item and remove it from any outfits / packing lists. */
-export async function deleteClosetItem(itemId: number): Promise<void> {
-  await db.transaction('rw', [db.closetItems, db.outfits, db.packingItems, db.savedOutfits], async () => {
+/**
+ * Delete a closet item and remove it from any outfits / packing lists.
+ * It goes to the trash (remembering where it was used) unless `toTrash` is false.
+ */
+export async function deleteClosetItem(itemId: number, toTrash = true): Promise<void> {
+  await db.transaction('rw', [db.closetItems, db.outfits, db.packingItems, db.savedOutfits, db.trash], async () => {
+    const item = await db.closetItems.get(itemId);
+    if (item && toTrash) {
+      await db.trash.add({
+        kind: 'closetItem',
+        name: item.name,
+        deletedAt: Date.now(),
+        data: {
+          item,
+          savedOutfitIds: (await db.savedOutfits.filter((o) => o.itemIds.includes(itemId)).toArray()).map((o) => o.id!),
+          outfits: (await db.outfits.filter((o) => o.itemIds.includes(itemId)).toArray()).map((o) => ({ id: o.id!, locked: o.lockedItemIds.includes(itemId) })),
+          packingItems: await db.packingItems.where('itemId').equals(itemId).toArray(),
+        },
+      });
+    }
     await db.closetItems.delete(itemId);
     await db.savedOutfits.toCollection().modify((o) => {
       o.itemIds = o.itemIds.filter((id) => id !== itemId);
@@ -130,5 +169,14 @@ export async function deleteClosetItem(itemId: number): Promise<void> {
       o.itemIds = o.itemIds.filter((id) => id !== itemId);
       o.lockedItemIds = o.lockedItemIds.filter((id) => id !== itemId);
     });
+  });
+}
+
+/** Delete a general packing item; it goes to the trash for 30 days. */
+export async function deleteGeneralItem(itemId: number): Promise<void> {
+  await db.transaction('rw', db.generalItems, db.trash, async () => {
+    const item = await db.generalItems.get(itemId);
+    if (item) await db.trash.add({ kind: 'generalItem', name: item.name, deletedAt: Date.now(), data: { item } });
+    await db.generalItems.delete(itemId);
   });
 }
