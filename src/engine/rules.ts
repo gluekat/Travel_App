@@ -42,6 +42,7 @@ const ACTIVITY_OCCASION: Record<Activity, Occasion> = {
   beach: 'beach',
   'dinner out': 'dressy',
   business: 'dressy',
+  work: 'dressy',
   nightlife: 'dressy',
   sightseeing: 'everyday',
   'travel day': 'everyday',
@@ -77,7 +78,7 @@ export const FORMALITY_RANK: Record<Formality, number> = { casual: 0, 'smart cas
 /** Minimum formality the activities call for. */
 export function requiredFormality(activities: Activity[]): Formality {
   if (activities.includes('business')) return 'formal';
-  if (activities.includes('dinner out') || activities.includes('nightlife')) return 'smart casual';
+  if (activities.includes('dinner out') || activities.includes('nightlife') || activities.includes('work')) return 'smart casual';
   return 'casual';
 }
 
@@ -91,6 +92,8 @@ export const CATEGORY_SLOTS: Record<Category, Slot[]> = {
   top: ['top'],
   bottom: ['bottom'],
   dress: ['dress'],
+  // A jumpsuit, romper or similar: worn instead of a separate top and bottom.
+  'one-piece': ['dress'],
   outerwear: ['outerwear'],
   shoes: ['shoes'],
   accessory: ['accessory'],
@@ -145,8 +148,11 @@ export function scoreItem(item: EngineItem, ctx: ScoreContext): number {
   if (needs) {
     const hotish = needs.band === 'hot' || needs.band === 'warm';
     const coldish = needs.band === 'cold' || needs.band === 'freezing' || needs.band === 'cool';
-    if (item.weatherTags.includes('hot')) s += hotish ? 1 : coldish ? -2 : 0;
-    if (item.weatherTags.includes('cold')) s += coldish ? 1 : hotish ? -2 : 0;
+    const tags = item.weatherTags;
+    if (tags.includes('hot') || tags.includes('warm')) s += hotish ? 1 : coldish ? -2 : 0;
+    if (tags.includes('cold') || tags.includes('chilly') || tags.includes('cool')) s += coldish ? 1 : hotish ? -2 : 0;
+    if (tags.includes('mild')) s += needs.band === 'mild' ? 1 : 0;
+    if (tags.includes('snow')) s += needs.band === 'freezing' || needs.band === 'cold' ? 1 : hotish ? -2 : 0;
     if (item.weatherTags.includes('sun') && hotish && !ctx.rainy) s += 0.5;
   }
 

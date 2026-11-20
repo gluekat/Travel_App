@@ -64,13 +64,12 @@ export async function refreshTripWeather(tripId: number, fetchImpl?: FetchLike):
   };
 }
 
-export async function setManualWeather(tripDayId: number, w: Pick<DayWeather, 'high' | 'low' | 'precipChance'>) {
-  await db.tripDays.update(tripDayId, {
-    weather: {
-      ...w,
-      condition: w.precipChance > 50 ? 'Rain likely' : 'Manual entry',
-      source: 'manual',
-      fetchedAt: Date.now(),
-    },
-  });
+export async function setManualWeather(tripDayId: number, w: Pick<DayWeather, 'high' | 'low' | 'precipChance'>, field: 'weather' | 'weatherFrom' = 'weather') {
+  const weather: DayWeather = {
+    ...w,
+    condition: w.precipChance > 50 ? 'Rain likely' : 'Manual entry',
+    source: 'manual',
+    fetchedAt: Date.now(),
+  };
+  await db.tripDays.update(tripDayId, field === 'weatherFrom' ? { weatherFrom: weather } : { weather });
 }

@@ -7,7 +7,7 @@ import { db } from '../../db/schema';
 import { ItemThumb } from '../../components/ItemThumb';
 import { OutfitCard } from '../outfits/OutfitCard';
 import { addOutfit, addOutfitFromSaved, addSleepwearOutfit } from '../outfits/outfitService';
-import { WeatherLine, WeatherSummary } from './WeatherSummary';
+import { WeatherSummary } from './WeatherSummary';
 import type { DayPlace } from './dayPlaces';
 import { setDayActivities } from './tripService';
 
@@ -51,11 +51,10 @@ export function DayCard({ day, index, outfits, closet, usage, tripTotals, cumula
         <span className="font-normal text-slate-500">· {formatDay(day.date)}</span>
         {location && <span className="font-normal text-teal-700"> · {location}</span>}
       </h3>
-      {place?.from && day.weatherFrom ? (
+      {place?.from ? (
         <div className="space-y-1.5" aria-label="Weather for each location">
-          <WeatherLine weather={day.weatherFrom} unit={unit} label={place.from.label} />
-          <p className="text-xs font-semibold text-teal-800">{place.toLabel}</p>
-          <WeatherSummary dayId={day.id!} weather={day.weather} unit={unit} />
+          <WeatherSummary dayId={day.id!} weather={day.weatherFrom} unit={unit} field="weatherFrom" label={place.from.label} />
+          <WeatherSummary dayId={day.id!} weather={day.weather} unit={unit} label={place.toLabel} />
         </div>
       ) : (
         <WeatherSummary dayId={day.id!} weather={day.weather} unit={unit} />

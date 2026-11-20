@@ -23,41 +23,27 @@ import { PlaceSearch } from './PlaceSearch';
 import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace } from './tripService';
 
 function TripNotesSection({ trip }: { trip: Trip }) {
-  const [weatherNote, setWeatherNote] = useState(trip.notes?.weather ?? '');
-  const [packingNote, setPackingNote] = useState(trip.notes?.packingAlerts ?? '');
+  // Older trips kept separate weather and packing notes; show them together in the one field.
+  const [note, setNote] = useState(trip.notes?.general ?? [trip.notes?.weather, trip.notes?.packingAlerts].filter(Boolean).join('\n'));
 
-  async function saveNote(key: 'weather' | 'packingAlerts', value: string) {
-    const current = await db.trips.get(trip.id!);
-    const existing = current?.notes ?? {};
-    const trimmed = value.trim();
-    await db.trips.update(trip.id!, { notes: { ...existing, [key]: trimmed || undefined } });
+  async function save() {
+    const trimmed = note.trim();
+    if (trimmed === (trip.notes?.general ?? '')) return;
+    await db.trips.update(trip.id!, { notes: trimmed ? { general: trimmed } : undefined });
   }
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <h2 className="mb-3 text-sm font-semibold text-slate-700">Trip Notes <span className="font-normal text-slate-400">(optional)</span></h2>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="General Weather" hint="Broad conditions to keep in mind when packing.">
-          <textarea
-            className={`${inputClass} resize-none`}
-            rows={3}
-            placeholder="e.g. Hot and humid, afternoon thunderstorms likely"
-            value={weatherNote}
-            onChange={(e) => setWeatherNote(e.target.value)}
-            onBlur={() => saveNote('weather', weatherNote)}
-          />
-        </Field>
-        <Field label="Packing Alerts" hint="Reminders, dress codes, special requirements.">
-          <textarea
-            className={`${inputClass} resize-none`}
-            rows={3}
-            placeholder="e.g. Bring a rain jacket; smart dress required for restaurants"
-            value={packingNote}
-            onChange={(e) => setPackingNote(e.target.value)}
-            onBlur={() => saveNote('packingAlerts', packingNote)}
-          />
-        </Field>
-      </div>
+      <h2 className="mb-2 text-sm font-semibold text-slate-700">Trip Notes <span className="font-normal text-slate-400">(optional)</span></h2>
+      <textarea
+        className={`${inputClass} resize-none`}
+        rows={3}
+        aria-label="Trip notes"
+        placeholder="e.g. Hot and humid, afternoon thunderstorms likely. Bring a rain jacket; smart dress required for restaurants."
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onBlur={() => void save()}
+      />
     </div>
   );
 }
