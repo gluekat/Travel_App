@@ -9,7 +9,7 @@ PackWise is a local-first travel app that picks and packs outfits for a trip fro
 - **Outfits:** each day shows its weather and the outfit(s) you chose. Build them by hand (add, swap, lock or remove items), add as many outfits per day as you like (e.g. "Hiking", "Dinner"), and press **Suggest outfit** when you want ideas: you get two fresh options plus your best-fitting saved outfits (favorites first), each with a short "why" and any gaps (e.g. *"No rain-ready outerwear for Day 3"*). **Suggest outfits for empty days** fills every day you haven't planned yet.
 - **Trip tabs:** each trip has a **Trip Overview** (days, weather, outfits; the default), a **Packing Checklist**, an **Itinerary** (transportation with layovers and drive times, lodging, scheduled activities) and a **Closet** tab for browsing your clothes without leaving the trip. Day locations and weather follow your transportation, and travel days show weather for both places.
 - **Laundry and wear counts:** plan laundry days; each outfit item shows which wear it is ("wear 2 of 3") and warns on the day it runs out.
-- **Trash:** deleted trips and closet items are kept for 30 days and can be restored.
+- **Trash:** deleted trips, closet items and saved outfits are kept for 30 days and can be restored.
 - **Packing Checklist:** general items for the whole trip (your **Default**-tagged items such as Underwear and Socks at 1 per day, Jacket and Toiletries, plus others you add, sorted by category), laundry and wear warnings, then clothes grouped by category with the number of copies to pack. Checkboxes persist, and there's a mix-and-match stat and a print view.
 - **Works offline:** it installs as a PWA, and everything is stored in your browser.
 

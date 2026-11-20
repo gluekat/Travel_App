@@ -312,6 +312,8 @@ export interface TransportLeg {
   notes?: string;
   /** Set when the trip's dates changed and this entry was not updated to match; cleared when edited or dismissed. */
   needsAttention?: string;
+  /** A suggested hop created from the trip's destinations; not yet filled in by the user. Cleared when saved. */
+  placeholder?: boolean;
   createdAt: number;
 }
 
@@ -380,4 +382,5 @@ export interface ClosetItemSnapshot {
 export type TrashEntry =
   | { id?: number; kind: 'trip'; name: string; deletedAt: number; data: TripSnapshot }
   | { id?: number; kind: 'closetItem'; name: string; deletedAt: number; data: ClosetItemSnapshot }
+  | { id?: number; kind: 'savedOutfit'; name: string; deletedAt: number; data: { outfit: SavedOutfit } }
   | { id?: number; kind: 'generalItem'; name: string; deletedAt: number; data: { item: GeneralItem } };

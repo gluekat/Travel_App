@@ -42,6 +42,8 @@ export function planLodging(stays: TripLodging[], oldStart: string, newStart: st
 }
 
 export function planTransport(legs: TransportLeg[], oldStart: string, newStart: string, oldEnd: string, newEnd: string): DateAdjustment[] {
+  // Placeholders are simply regenerated from the new dates, so they are not proposed.
+  legs = legs.filter((l) => !l.placeholder);
   const byId = new Map(legs.map((l) => [l.id!, l]));
   return shiftTransportForTripDates(legs, oldStart, newStart, oldEnd, newEnd).map(({ id, patch }) => {
     const leg = byId.get(id)!;

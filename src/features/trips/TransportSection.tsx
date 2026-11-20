@@ -51,6 +51,12 @@ function SegmentRow({ seg, onEdit, onDelete, onDismiss, first }: { seg: Segment;
         </div>
       )}
       <div className={`rounded-lg border bg-white p-3 ${seg.needsAttention ? 'border-amber-300' : 'border-slate-200'}`}>
+        {seg.placeholder && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded bg-sky-50 px-2 py-1 text-xs text-sky-800">
+            <span>📝 Placeholder from your destinations — add the type of travel, times and booking details.</span>
+            <button type="button" onClick={onEdit} className="no-print underline">Fill in</button>
+          </div>
+        )}
         {seg.needsAttention && (
           <div className="mb-2 flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800" role="alert">
             <span>⚠️ Needs updating — {seg.needsAttention}</span>
@@ -323,6 +329,7 @@ function draftToLeg(d: Draft, tripId: number, existing?: TransportLeg): Omit<Tra
     connections: stops.length ? stops : undefined,
     notes: d.notes.trim() || undefined,
     needsAttention: undefined,
+    placeholder: undefined,
     createdAt: existing?.createdAt ?? Date.now(),
   };
 }

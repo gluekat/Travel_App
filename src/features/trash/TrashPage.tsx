@@ -6,7 +6,7 @@ import { formatTimestamp } from '../../lib/dates';
 import { Button, Icon } from '../../components/ui';
 import { daysLeft, deleteForever, emptyTrash, purgeExpiredTrash, restoreFromTrash } from './trashService';
 
-const KIND_LABEL: Record<TrashEntry['kind'], string> = { trip: '🧳 Trip', closetItem: '👕 Closet item', generalItem: '🎒 General item' };
+const KIND_LABEL: Record<TrashEntry['kind'], string> = { trip: '🧳 Trip', closetItem: '👕 Closet item', savedOutfit: '👗 Saved outfit', generalItem: '🎒 General item' };
 
 function detail(e: TrashEntry): string {
   if (e.kind === 'trip') return `${e.data.days.length} days · ${e.data.outfits.filter((o) => o.itemIds.length).length} outfits`;
@@ -14,6 +14,7 @@ function detail(e: TrashEntry): string {
     const used = e.data.outfits.length + e.data.savedOutfitIds.length;
     return used ? `Will return to ${used} outfit${used !== 1 ? 's' : ''}` : e.data.item.category;
   }
+  if (e.kind === 'savedOutfit') return `${e.data.outfit.itemIds.length} item${e.data.outfit.itemIds.length !== 1 ? 's' : ''}`;
   return e.data.item.category ?? 'General';
 }
 
@@ -29,7 +30,7 @@ export function TrashPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">Trash</h1>
-          <p className="text-sm text-slate-600">Deleted trips and closet items stay here for {TRASH_DAYS} days, then are removed for good.</p>
+          <p className="text-sm text-slate-600">Deleted trips, closet items and saved outfits stay here for {TRASH_DAYS} days, then are removed for good.</p>
         </div>
         {(entries?.length ?? 0) > 0 && (
           <Button variant="danger" onClick={async () => confirm(`Permanently delete all ${entries!.length} items in the trash? This can't be undone.`) && (await emptyTrash())}>

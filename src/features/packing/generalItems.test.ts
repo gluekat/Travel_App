@@ -70,6 +70,7 @@ describe('trip date changes propose lodging and transport updates', () => {
     const { setTripDates } = await import('../trips/tripService');
     const { planTripDateAdjustments, applyAdjustments, flagAdjustments } = await import('../trips/tripAdjustments');
     const tripId = await createTrip('Rome', undefined, '2026-06-01', '2026-06-03');
+    await db.tripTransport.clear(); // drop the auto-created placeholders; this test uses real bookings
     await db.tripLodging.add({ tripId, name: 'Hotel', checkInDate: '2026-06-01', checkOutDate: '2026-06-03', createdAt: 1 });
     await db.tripTransport.bulkAdd([
       { tripId, direction: 'outbound', mode: 'fly', departureDate: '2026-06-01', createdAt: 1 },

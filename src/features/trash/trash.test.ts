@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { db, deleteClosetItem, deleteGeneralItem, deleteTrip } from '../../db/schema';
+import { db, deleteClosetItem, deleteGeneralItem, deleteSavedOutfit, deleteTrip } from '../../db/schema';
 import { createTrip } from '../trips/tripService';
 import { addItemsToOutfit } from '../outfits/outfitService';
 import { daysLeft, deleteForever, purgeExpiredTrash, restoreFromTrash } from './trashService';
@@ -15,6 +15,7 @@ describe('trash', () => {
     const tripId = await createTrip('Rome', undefined, '2026-06-01', '2026-06-03');
     await db.tripLodging.add({ tripId, name: 'Hotel', checkInDate: '2026-06-01', checkOutDate: '2026-06-03', createdAt: 1 });
     await db.tripTransport.add({ tripId, direction: 'outbound', mode: 'fly', departureDate: '2026-06-01', createdAt: 1 });
+    const transportBefore = await db.tripTransport.count();
     const before = { days: await db.tripDays.count(), outfits: await db.outfits.count(), packing: await db.packingItems.count() };
 
     await deleteTrip(tripId);
@@ -28,7 +29,7 @@ describe('trash', () => {
     expect(await db.trips.get(tripId)).toBeTruthy();
     expect({ days: await db.tripDays.count(), outfits: await db.outfits.count(), packing: await db.packingItems.count() }).toEqual(before);
     expect(await db.tripLodging.count()).toBe(1);
-    expect(await db.tripTransport.count()).toBe(1);
+    expect(await db.tripTransport.count()).toBe(transportBefore);
   });
 
   it('puts a closet item back into the outfits, saved outfits and packing list it was removed from', async () => {
@@ -49,6 +50,20 @@ describe('trash', () => {
     expect((await db.outfits.get(outfit.id!))!.itemIds).toEqual([itemId]);
     expect((await db.savedOutfits.get(savedId))!.itemIds).toEqual([itemId]);
     expect(await db.packingItems.where('itemId').equals(itemId).count()).toBe(1);
+  });
+
+  it('restores a deleted saved outfit, leaving out items deleted in the meantime', async () => {
+    const a = (await db.closetItems.add({ ...item, name: 'A' })) as number;
+    const b = (await db.closetItems.add({ ...item, name: 'B' })) as number;
+    const id = (await db.savedOutfits.add({ name: 'Look', itemIds: [a, b], favorite: true, createdAt: 1, updatedAt: 1 })) as number;
+    await deleteSavedOutfit(id);
+    expect(await db.savedOutfits.count()).toBe(0);
+    const [entry] = await db.trash.toArray();
+    expect(entry).toMatchObject({ kind: 'savedOutfit', name: 'Look' });
+    await deleteClosetItem(b, false);
+    await restoreFromTrash(entry.id!);
+    expect(await db.savedOutfits.get(id)).toMatchObject({ name: 'Look', itemIds: [a], favorite: true });
+    expect(await db.trash.count()).toBe(0);
   });
 
   it('keeps general items, expires after 30 days, and clearing samples bypasses the trash', async () => {
