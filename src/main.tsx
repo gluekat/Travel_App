@@ -7,9 +7,10 @@ import { App } from './App';
 import { seedIfFirstRun } from './db/seed';
 import { requestPersistentStorage } from './db/persist';
 import { initSync } from './storage/fileSync';
-import { IS_DEV_CHANNEL } from './lib/channel';
+import { IS_DEV_CHANNEL, IS_EVAL_CHANNEL } from './lib/channel';
 
 if (IS_DEV_CHANNEL) document.title = 'PackWise (dev)';
+if (IS_EVAL_CHANNEL) document.title = 'PackWise (evaluation)';
 
 async function start() {
   await seedIfFirstRun();

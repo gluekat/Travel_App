@@ -1,0 +1,7 @@
+# The evaluation snapshot published at https://gluekat.github.io/Travel_App/eval/
+#
+# Put one commit SHA (or tag) on the line below. The Pages workflow builds exactly that commit, so the evaluation
+# site stays the same while development continues. To publish a newer snapshot, change the SHA and merge to the
+# default branch. Leave it empty to skip the evaluation site. The commit must contain the `eval` channel
+# (src/lib/channel.ts).
+0b7ba2097e4c4daac515a7565eba65fc9e04db48

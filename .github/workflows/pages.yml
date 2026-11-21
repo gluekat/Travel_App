@@ -1,6 +1,8 @@
-# Publishes two versions of PackWise to GitHub Pages in one site:
-#   Stable:  https://gluekat.github.io/Travel_App/      (built from the `release` branch)
-#   Dev:     https://gluekat.github.io/Travel_App/dev/  (built from the default branch)
+# Publishes up to three versions of PackWise to GitHub Pages in one site:
+#   Stable:  https://gluekat.github.io/Travel_App/       (built from the `release` branch)
+#   Dev:     https://gluekat.github.io/Travel_App/dev/   (built from the default branch)
+#   Eval:    https://gluekat.github.io/Travel_App/eval/  (a fixed snapshot: the commit named in .github/eval-ref;
+#                                                         skipped when that file names no commit)
 # Runs on every push to the default branch, when `release` changes (via
 # release-deploy.yml / promote.yml), or manually from the Actions tab.
 # Only the apps' static files are published; user data never leaves each visitor's device.
@@ -29,6 +31,19 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: dev-src
+
+      - name: Read the evaluation snapshot to publish
+        id: evalref
+        run: |
+          ref="$(grep -vE '^[[:space:]]*(#|$)' dev-src/.github/eval-ref 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the evaluation snapshot
+        if: steps.evalref.outputs.ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.evalref.outputs.ref }}
+          path: eval-src
 
       - name: Check out the release branch
         uses: actions/checkout@v4
@@ -63,12 +78,24 @@ jobs:
           VITE_BASE: /Travel_App/dev/
           VITE_CHANNEL: dev
 
+      - name: Test and build evaluation snapshot (/Travel_App/eval/)
+        if: steps.evalref.outputs.ref != ''
+        working-directory: eval-src
+        run: |
+          npm ci
+          npm test
+          npm run build
+        env:
+          VITE_BASE: /Travel_App/eval/
+          VITE_CHANNEL: eval
+
       - name: Combine into one site
         run: |
           mkdir -p site/dev
           cp -r stable-src/dist/. site/
           cp -r dev-src/dist/. site/dev/
-          echo "stable: $(git -C stable-src rev-parse --short HEAD)  dev: $(git -C dev-src rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d eval-src/dist ]; then mkdir -p site/eval && cp -r eval-src/dist/. site/eval/; fi
+          echo "stable: $(git -C stable-src rev-parse --short HEAD)  dev: $(git -C dev-src rev-parse --short HEAD)  eval: $(git -C eval-src rev-parse --short HEAD 2>/dev/null || echo none)" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

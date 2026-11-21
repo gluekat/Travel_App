@@ -40,12 +40,15 @@ The service worker is only active in the production build (`npm run build && npm
 | --- | --- | --- | --- |
 | **Stable** | https://gluekat.github.io/Travel_App/ | `release` branch | only when you promote |
 | **Dev preview** | https://gluekat.github.io/Travel_App/dev/ | default branch | every push |
+| **Evaluation** | https://gluekat.github.io/Travel_App/eval/ | the fixed commit named in `.github/eval-ref` | only when you change that file |
 
-Share the stable link with people trying the app. Use the dev link to preview work in progress. It shows an amber **DEV** badge.
+Share the stable link with people trying the app. Use the dev link to preview work in progress. It shows an amber **DEV** badge. Share the **evaluation** link for a fixed snapshot to review (blue **EVAL** badge): it doesn't change while development continues.
+
+- **Publish or update the evaluation snapshot:** put the commit SHA on the last line of [`.github/eval-ref`](.github/eval-ref) and merge to the default branch; the Pages workflow then builds exactly that commit at `/eval/`. An empty file skips the evaluation site. The commit must already contain the `eval` channel.
 
 - **Publish a new stable version:** *Actions → Promote dev to stable → Run workflow*. This fast-forwards `release` to the latest dev commit and redeploys. It never rewrites history; if `release` has commits of its own it stops and says so. Pushing to `release` directly (e.g. a hotfix) also redeploys, via `release-deploy.yml`.
 - **How it's built:** `.github/workflows/pages.yml` checks out both branches, runs the tests on each, and builds stable with `VITE_BASE=/Travel_App/` and dev with `VITE_BASE=/Travel_App/dev/ VITE_CHANNEL=dev`. It then publishes them together as one site.
-- **Separate data:** both versions share one web address, so the dev build uses its own storage (`packwise-dev` databases, `packwise-dev-data.json`). A newer dev version can never change or break the data of the stable one. They also install as separate apps ("PackWise" and "PackWise dev") and have separate offline caches.
+- **Separate data:** both versions share one web address, so the dev and evaluation builds use their own storage (`packwise-dev` / `packwise-eval` databases and data files). A newer version can never change or break the data of another. They also install as separate apps ("PackWise", "PackWise dev" and "PackWise eval") and have separate offline caches.
 - One-time setup (already done): *Settings → Pages → Source: **GitHub Actions***.
 
 ## Installing the app (PWA)

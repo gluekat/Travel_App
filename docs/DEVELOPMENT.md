@@ -213,6 +213,7 @@ The application code is about 11,500 lines of TypeScript/TSX, tests included.
 | `packwise` | All user data (stable build) | Yes |
 | `packwise-meta` | Sync bookkeeping: linked file handle, timestamps, reminder snooze | **No** (by design) |
 | `packwise-dev`, `packwise-meta-dev` | Same, for the dev-preview build only (§12.3) | Yes / No |
+| `packwise-eval`, `packwise-meta-eval` | Same, for the evaluation snapshot only (§12.3) | Yes / No |
 
 ### 6.2 Tables (`src/db/schema.ts`, schema version 8)
 
@@ -440,7 +441,7 @@ To replace the engine, implement `OutfitEngine` (`src/engine/types.ts`) and rout
 | Variable | Default | Effect |
 |---|---|---|
 | `VITE_BASE` | `/` | Public path; `/Travel_App/` or `/Travel_App/dev/` on Pages. Also sets manifest `start_url`/`scope`/`id` and the service-worker fallback |
-| `VITE_CHANNEL` | (stable) | `dev` → separate storage names, "DEV" badge, "PackWise (dev)" title, separate installable app |
+| `VITE_CHANNEL` | (stable) | `dev` or `eval` → separate storage names, "DEV" / "EVAL" badge, own title, separate installable app |
 
 ### 12.2 Hosting: GitHub Pages
 
@@ -448,6 +449,7 @@ To replace the engine, implement `OutfitEngine` (`src/engine/types.ts`) and rout
 |---|---|---|
 | Stable | https://gluekat.github.io/Travel_App/ | `release` branch |
 | Dev preview | https://gluekat.github.io/Travel_App/dev/ | default branch |
+| Evaluation | https://gluekat.github.io/Travel_App/eval/ | the commit SHA in `.github/eval-ref` (fixed snapshot; skipped when empty) |
 
 Repository setting: *Settings → Pages → Source = GitHub Actions*. With "Deploy from a branch" selected, GitHub's own deployment overwrites the build with raw sources and the site shows a blank page (this happened once; §17).
 
@@ -455,12 +457,14 @@ Repository setting: *Settings → Pages → Source = GitHub Actions*. With "Depl
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `pages.yml` | push to default branch; manual | Checks out **both** branches; `npm ci`, `npm test`, build each with its variables; combines `stable → /`, `dev → /dev/`; deploys to Pages. Concurrency group `pages` cancels superseded runs |
+| `pages.yml` | push to default branch; manual | Checks out the default branch, `release` and (if `.github/eval-ref` names a commit) the evaluation snapshot; `npm ci`, `npm test`, build each with its variables; combines `stable → /`, `dev → /dev/`; deploys to Pages. Concurrency group `pages` cancels superseded runs |
 | `promote.yml` | manual ("Promote dev to stable") | Fast-forwards `release` to the default branch (refuses if `release` has diverged); triggers `pages.yml` |
 | `release-deploy.yml` | push to `release` | Triggers `pages.yml` on the default branch (deployments run from the default branch, which the `github-pages` environment allows) |
 | `desktop-build.yml` | manual; `v*` tags | Builds Windows (`.msi`, `.exe`), macOS (Apple Silicon, Intel `.dmg`) and Linux (`.deb`, `.rpm`, `.AppImage`); uploads artifacts; drafts a release on tags |
 
-**Stable vs dev isolation on one origin:** separate IndexedDB names, separate data-file names, separate manifest `id`s, separate service-worker scopes. Stable's service worker excludes `/dev/` navigations (`navigateFallbackDenylist`). This was verified in a local side-by-side test, online and offline.
+**Evaluation snapshot:** `pages.yml` reads the first non-comment line of `.github/eval-ref` (read from the default branch) and builds that exact commit with `VITE_BASE=/Travel_App/eval/ VITE_CHANNEL=eval`. The commit must contain the `eval` channel. Known limitation: a browser that already installed an *older* stable build (whose service worker predates `eval`) may answer `/eval/` navigations with the stable app until stable is promoted; first-time visitors are unaffected.
+
+**Stable vs dev vs eval isolation on one origin:** separate IndexedDB names, separate data-file names, separate manifest `id`s, separate service-worker scopes. Stable's service worker excludes `/dev/` navigations (`navigateFallbackDenylist`). This was verified in a local side-by-side test, online and offline.
 
 ### 12.4 Release procedure
 
