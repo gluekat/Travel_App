@@ -9,8 +9,14 @@ import { WEB_CSP } from './src/lib/csp.ts';
 // build sets VITE_BASE=/Travel_App/ because Pages serves the repo from a sub-path.
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const base = env.VITE_BASE ?? '/';
-// 'dev' for the development preview hosted at /Travel_App/dev/ (see src/lib/channel.ts).
-const isDev = env.VITE_CHANNEL === 'dev';
+// 'dev' for the development preview at /Travel_App/dev/, 'eval' for the evaluation snapshot at /Travel_App/eval/
+// (see src/lib/channel.ts).
+const channel = env.VITE_CHANNEL === 'dev' || env.VITE_CHANNEL === 'eval' ? env.VITE_CHANNEL : 'stable';
+const MANIFEST_NAMES = {
+  stable: { name: 'PackWise', short: 'PackWise' },
+  dev: { name: 'PackWise (dev preview)', short: 'PackWise dev' },
+  eval: { name: 'PackWise (evaluation)', short: 'PackWise eval' },
+}[channel];
 
 // Content Security Policy (src/lib/csp.ts) for the web build. GitHub Pages
 // can't send headers, so it is delivered as a <meta> tag. Skipped for the
@@ -41,9 +47,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: isDev ? 'PackWise (dev preview)' : 'PackWise',
-        short_name: isDev ? 'PackWise dev' : 'PackWise',
-        // Distinct id so the stable and dev versions install as separate apps.
+        name: MANIFEST_NAMES.name,
+        short_name: MANIFEST_NAMES.short,
+        // Distinct id so the stable, dev and evaluation versions install as separate apps.
         id: base,
         description: 'Plan and pack outfits for your trip. Your data stays on your device.',
         theme_color: '#0f766e',
@@ -61,9 +67,9 @@ export default defineConfig({
         // Precache every built asset so the app shell loads with no network.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
         navigateFallback: `${base}index.html`,
-        // The stable app's scope contains the dev preview at <base>dev/; never
-        // answer those navigations with the stable app.
-        navigateFallbackDenylist: isDev ? [] : [new RegExp(`^${base}dev/`)],
+        // The stable app's scope contains the dev preview at <base>dev/ and the evaluation snapshot at <base>eval/;
+        // never answer those navigations with the stable app.
+        navigateFallbackDenylist: channel === 'stable' ? [new RegExp(`^${base}(dev|eval)/`)] : [],
         // Weather API calls are never cached by the service worker; the app
         // caches weather per trip in IndexedDB instead.
         runtimeCaching: [],

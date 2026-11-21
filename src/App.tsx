@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { useRoute } from './lib/router';
-import { IS_DEV_CHANNEL } from './lib/channel';
+import { IS_DEV_CHANNEL, IS_EVAL_CHANNEL } from './lib/channel';
 import { Icon } from './components/ui';
 import { OfflineBanner } from './components/OfflineBanner';
 import { SyncBanner } from './components/SyncBanner';
@@ -55,6 +55,11 @@ export function App() {
             {IS_DEV_CHANNEL && (
               <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950" title="Development preview: may change or break. Data is kept separate from the stable version.">
                 dev
+              </span>
+            )}
+            {IS_EVAL_CHANNEL && (
+              <span className="rounded bg-sky-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white" title="Evaluation version: a fixed snapshot shared for testing. Its data is kept separate from the stable and dev versions.">
+                eval
               </span>
             )}
           </a>
