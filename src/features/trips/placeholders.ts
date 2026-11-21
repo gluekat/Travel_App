@@ -1,6 +1,6 @@
 /** Placeholder transportation for a trip's destinations: one hop to each stop, and home again at the end. */
 import { db, getSetting } from '../../db/schema';
-import type { HomeLocation, TransportLeg, Trip, TripStop } from '../../db/types';
+import type { HomeLocation, TransportLeg, TransportMode, Trip, TripStop } from '../../db/types';
 import { airportByCode, airportLabel, nearestAirport } from '../../lib/airports';
 import { shortLocation } from '../../lib/dates';
 import { placeKey, placeName } from './dayPlaces';
@@ -13,6 +13,7 @@ interface Point {
 
 export interface Hop {
   direction: 'outbound' | 'return';
+  mode: TransportMode;
   from: Point;
   to: Point;
   /** Travel date: arrival at a stop on its first day, or the departure home on the last day. */
@@ -34,17 +35,34 @@ export function tripStopsOf(trip: Trip): Pick<TripStop, 'label' | 'lat' | 'lon' 
   return [{ label: shortLocation(trip.placeLabel ?? trip.destination), lat: trip.lat, lon: trip.lon, startDate: trip.startDate, endDate: trip.endDate }];
 }
 
-/** Home → stop 1 → … → last stop → home, with each hop's date taken from the destinations. */
+/** A place as shown for a given kind of travel: airports for flights, the city itself otherwise. */
+function endFor(mode: TransportMode, label: string, lat?: number, lon?: number): Point {
+  return mode === 'fly' ? flightEnd(label, lat, lon) : { label: shortLocation(label), lat, lon };
+}
+
+/**
+ * Home → stop 1 → … → last stop → home, with each hop's date taken from the destinations and its kind of travel from
+ * `trip.travelModes` (flight when not chosen). Flights use airports; other kinds of travel use cities.
+ */
 export function tripHops(trip: Trip, home?: HomeLocation | null, homeAirport?: string | null): Hop[] {
   const stops = tripStopsOf(trip);
   const airport = homeAirport ? airportByCode(homeAirport) : undefined;
-  const homePoint: Point = airport ? { label: airportLabel(airport), lat: airport.lat, lon: airport.lon } : home ? flightEnd(home.label, home.lat, home.lon) : { label: '' };
-  const at = (s: (typeof stops)[number]): Point => flightEnd(shortLocation(s.label), s.lat, s.lon);
+  const homeFor = (mode: TransportMode): Point => {
+    if (mode === 'fly') return airport ? { label: airportLabel(airport), lat: airport.lat, lon: airport.lon } : home ? flightEnd(home.label, home.lat, home.lon) : { label: '' };
+    if (home) return { label: shortLocation(home.label), lat: home.lat, lon: home.lon };
+    return airport ? { label: placeName(airportLabel(airport)), lat: airport.lat, lon: airport.lon } : { label: '' };
+  };
+  const modeAt = (i: number): TransportMode => trip.travelModes?.[i] ?? 'fly';
+  const at = (mode: TransportMode, s: (typeof stops)[number]): Point => endFor(mode, s.label, s.lat, s.lon);
 
   const hops: Hop[] = [];
-  stops.forEach((s, i) => hops.push({ direction: 'outbound', from: i === 0 ? homePoint : at(stops[i - 1]), to: at(s), date: s.startDate }));
+  stops.forEach((s, i) => {
+    const mode = modeAt(i);
+    hops.push({ direction: 'outbound', mode, from: i === 0 ? homeFor(mode) : at(mode, stops[i - 1]), to: at(mode, s), date: s.startDate });
+  });
   const last = stops[stops.length - 1];
-  hops.push({ direction: 'return', from: at(last), to: homePoint, date: last.endDate });
+  const back = modeAt(stops.length);
+  hops.push({ direction: 'return', mode: back, from: at(back, last), to: homeFor(back), date: last.endDate });
   return hops;
 }
 
@@ -77,7 +95,7 @@ export async function refreshPlaceholders(tripId: number): Promise<void> {
       .map((h, i) => ({
         tripId,
         direction: h.direction,
-        mode: 'fly' as const,
+        mode: h.mode,
         departureDate: h.date,
         arrivalDate: h.date,
         fromPoint: h.from.label || undefined,

@@ -120,6 +120,8 @@ export interface Trip {
   notes?: TripNotes;
   /** For multi-destination trips (e.g. cruises): ordered stops with individual date ranges. */
   stops?: TripStop[];
+  /** How the traveller gets to each destination, in order, then home (so `stops + 1` entries; 2 for a single destination). Default: flight. */
+  travelModes?: TransportMode[];
   /** Closet items whose "may not suit the forecast" warning the user cleared for this trip. */
   dismissedForecast?: number[];
 }

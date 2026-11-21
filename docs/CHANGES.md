@@ -7,13 +7,14 @@ A brief overview of what was added or changed in this round of development (abou
 - **One add/edit form for every kind of item.** Choosing the category *general* switches to the general-item form; items are saved where they belong. Closing an existing item with **X** saves it.
 - **New item details:** warmth *none / not applicable*, size, material, notes, accessory type, one-piece category, more weather tags (cool, mild, warm, chilly, snow, windy), *Work* activity, pajama/activewear types for shoes and accessories.
 - **General packing items:** categories (Toiletries, Electronics, …), emoji or photo with emoji suggestions, *Default* tag (added to every new trip), trip-type and custom tags.
-- Click-to-reverse sorting (first click ascending, second reverses); saved outfits can be duplicated and show a selected-items panel while you choose; the Trash also holds saved outfits.
+- Click-to-reverse sorting (first click ascending, second reverses); saved outfits can be edited, duplicated and show a selected-items panel while you choose; location boxes select their text on focus; the Trash also holds saved outfits.
 - Duplicate adds "(duplicate)"; photos no longer disappear after edits.
 
 ## Trips
 - **Trip Overview:** per-day wear counts ("wear 2 of 3", orange only on the day the allowance is exceeded), laundry days, add-outfit chooser (new / sleepwear / saved outfits with previews), forecast warnings you can clear, a single trip-notes box, "Travel day" pre-selected on the first and last day, a Closet tab inside each trip.
 - **Sleepwear:** pre-filled with a pajama top + bottom or a one-piece; shoes and accessories offered as variants, only from pajamas.
 - **Weather and location follow the transportation:** each day's place comes from the transport legs; travel days show weather for both places, each with its source and an edit link.
+- **Kinds of travel:** each destination and the way home has a chosen kind of travel (flight, drive, train, cruise), set when creating or editing a trip, which preloads the placeholder transportation.
 - **Multi-stop trips are editable:** destinations can be changed, re-dated, added or removed; days, weather, day locations and placeholder transport follow.
 - **Date changes:** editing a trip's dates proposes matching lodging and transport changes; anything declined is flagged "needs updating" on the Itinerary.
 
@@ -32,5 +33,5 @@ A brief overview of what was added or changed in this round of development (abou
 - Data schema moved from v5 to v8 (general items, trash, travel-day migration). Backups exclude the trash.
 
 ## Quality
-- Test suite grew from 78 to 114 tests; build and type-check clean.
+- Test suite grew from 78 to 116 tests; build and type-check clean.
 - Privacy note updated: address, place and airport searches now also go to OpenStreetMap Nominatim (text you type only).

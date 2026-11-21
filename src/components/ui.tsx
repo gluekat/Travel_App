@@ -153,3 +153,14 @@ export function Icon({ name, className = 'h-4 w-4' }: { name: keyof typeof PATHS
     </svg>
   );
 }
+
+/**
+ * Props for text boxes that hold a location: focusing the box selects its text, so typing replaces it.
+ * Selecting is deferred one tick so the click that focused the box doesn't clear the selection.
+ */
+export const selectAllOnFocus = {
+  onFocus: (e: { currentTarget: HTMLInputElement }) => {
+    const el = e.currentTarget;
+    setTimeout(() => el.select(), 0);
+  },
+};

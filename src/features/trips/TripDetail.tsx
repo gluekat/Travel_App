@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
-import type { Trip, TripStop } from '../../db/types';
+import type { TransportMode, Trip, TripStop } from '../../db/types';
 import { addDays, dateRange, daysBetween, formatDay, formatTimestamp } from '../../lib/dates';
 import { useOnline, useTempUnit } from '../../lib/hooks';
 import { navigate } from '../../lib/router';
@@ -22,6 +22,7 @@ import { TripTabs } from './TripTabs';
 import { PlaceSearch } from './PlaceSearch';
 import { MAX_TRIP_DAYS, duplicateTrip, setTripDates, setTripPlace, setTripStops } from './tripService';
 import { refreshPlaceholders } from './placeholders';
+import { TravelModeSelect } from './TravelModeSelect';
 
 function TripNotesSection({ trip }: { trip: Trip }) {
   const [note, setNote] = useState(trip.notes?.general ?? '');
@@ -72,6 +73,8 @@ export function tripLabel(t: Trip): string {
 
 /** One destination being edited: the text in the search box, plus the place picked from it (if any). */
 interface StopEdit extends TripStop {
+  /** How you get to this destination. */
+  mode: TransportMode;
   query: string;
   place?: Place;
 }
@@ -98,7 +101,7 @@ const stopRange = (drafts: StopEdit[]): [string, string] => [drafts.map((s) => s
 function StopsEditor({ stops, onChange }: { stops: StopEdit[]; onChange: (update: (prev: StopEdit[]) => StopEdit[]) => void }) {
   // Functional updates: the search box reports a new query and clears the picked place in the same event.
   const patch = (i: number, p: Partial<StopEdit>) => onChange((prev) => prev.map((s, j) => (j === i ? { ...s, ...p } : s)));
-  const addStop = () => onChange((prev) => [...prev, { label: '', query: '', startDate: prev[prev.length - 1].endDate, endDate: addDays(prev[prev.length - 1].endDate, 3) }]);
+  const addStop = () => onChange((prev) => [...prev, { label: '', query: '', mode: 'fly', startDate: prev[prev.length - 1].endDate, endDate: addDays(prev[prev.length - 1].endDate, 3) }]);
   return (
     <div className="space-y-3">
       {stops.map((stop, i) => (
@@ -117,6 +120,7 @@ function StopsEditor({ stops, onChange }: { stops: StopEdit[]; onChange: (update
           <Field label="Dates">
             <DateRangePicker start={stop.startDate} end={stop.endDate} onChange={(s, e) => patch(i, { startDate: s, endDate: e })} />
           </Field>
+          <TravelModeSelect label={i === 0 ? 'Getting there by' : `Getting to ${stop.query.trim() || 'this stop'} by`} value={stop.mode} onChange={(m) => patch(i, { mode: m })} />
         </div>
       ))}
       <button type="button" onClick={addStop} className="flex items-center gap-1 text-sm text-teal-700 hover:text-teal-900">
@@ -186,7 +190,9 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<DateAdjustment[]>();
   const multi = !!trip.stops && trip.stops.length > 1;
-  const [stopDrafts, setStopDrafts] = useState<StopEdit[]>(() => (trip.stops ?? []).map((s) => ({ ...s, query: s.label })));
+  const [stopDrafts, setStopDrafts] = useState<StopEdit[]>(() => (trip.stops ?? []).map((s, i) => ({ ...s, query: s.label, mode: trip.travelModes?.[i] ?? 'fly' })));
+  const [arriveMode, setArriveMode] = useState<TransportMode>(trip.travelModes?.[0] ?? 'fly');
+  const [homeMode, setHomeMode] = useState<TransportMode>(trip.travelModes?.[multi ? trip.stops!.length : 1] ?? 'fly');
 
   async function save() {
     try {
@@ -197,6 +203,10 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
       const newStart = newStops ? newStops.map((s) => s.startDate).reduce((a, b) => (a < b ? a : b)) : start;
       const newEnd = newStops ? newStops.map((s) => s.endDate).reduce((a, b) => (a > b ? a : b)) : end;
       const stopsChanged = !!newStops && JSON.stringify(newStops) !== JSON.stringify(trip.stops);
+      const newModes: TransportMode[] = multi ? [...stopDrafts.map((d) => d.mode), homeMode] : [arriveMode, homeMode];
+      const oldModes = trip.travelModes ?? newModes.map(() => 'fly');
+      const modesChanged = JSON.stringify(newModes) !== JSON.stringify(oldModes);
+      if (modesChanged) await db.trips.update(trip.id!, { travelModes: newModes });
       const locationChanged = !!place || stopsChanged;
       const datesChanged = newStart !== trip.startDate || newEnd !== trip.endDate;
       if (!multi && place) await setTripPlace(trip.id!, place);
@@ -214,7 +224,7 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
           return;
         }
       }
-      if (!datesChanged && !stopsChanged && place) await refreshPlaceholders(trip.id!);
+      if (!datesChanged && !stopsChanged && (place || modesChanged)) await refreshPlaceholders(trip.id!);
       onClose();
       if (locationChanged || datesChanged) onRefreshWeather();
     } catch (e) {
@@ -252,8 +262,11 @@ function EditTripDialog({ trip, onClose, onRefreshWeather }: { trip: Trip; onClo
               {days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : 'Invalid dates'}
               {days > MAX_TRIP_DAYS && ` (max ${MAX_TRIP_DAYS})`}
             </p>
+            <TravelModeSelect label="Getting there by" value={arriveMode} onChange={setArriveMode} />
           </>
         )}
+        <TravelModeSelect label="Getting home by" value={homeMode} onChange={setHomeMode} />
+        <p className="text-xs text-slate-500">The ways of travelling preload the placeholder transportation on the Itinerary page (bookings you've filled in are kept).</p>
         {error && <Banner tone="error">{error}</Banner>}
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>

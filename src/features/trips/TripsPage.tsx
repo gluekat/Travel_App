@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, deleteTrip } from '../../db/schema';
-import type { Trip, TripStop } from '../../db/types';
+import type { TransportMode, Trip, TripStop } from '../../db/types';
 import { addDays, dateRange, formatDay, todayISO } from '../../lib/dates';
 import { navigate } from '../../lib/router';
 import type { Place } from '../../weather/openMeteo';
@@ -9,9 +9,12 @@ import { Banner, Button, Field, Icon, Modal } from '../../components/ui';
 import { DateRangePicker } from '../../components/DateRangePicker';
 import { PrivacyNote } from '../settings/PrivacyNote';
 import { PlaceSearch } from './PlaceSearch';
+import { TravelModeSelect } from './TravelModeSelect';
 import { createTrip, MAX_TRIP_DAYS } from './tripService';
 
 interface StopDraft {
+  /** How you get to this destination. */
+  mode: TransportMode;
   query: string;
   place?: Place;
   start: string;
@@ -22,8 +25,9 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
   const initStart = addDays(todayISO(), 3);
   const initEnd = addDays(todayISO(), 7);
   const [stops, setStops] = useState<StopDraft[]>([
-    { query: '', place: undefined, start: initStart, end: initEnd },
+    { mode: 'fly', query: '', place: undefined, start: initStart, end: initEnd },
   ]);
+  const [homeMode, setHomeMode] = useState<TransportMode>('fly');
   const [error, setError] = useState<string>();
 
   function updateStop(i: number, patch: Partial<StopDraft>) {
@@ -33,7 +37,7 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
   function addStop() {
     const last = stops[stops.length - 1];
     // Start the new stop on the same day the previous stop ends
-    setStops(s => [...s, { query: '', place: undefined, start: last.end, end: addDays(last.end, 3) }]);
+    setStops(s => [...s, { mode: 'fly', query: '', place: undefined, start: last.end, end: addDays(last.end, 3) }]);
   }
 
   function removeStop(i: number) {
@@ -50,9 +54,10 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
     const anyMissingPlace = stops.some(s => !s.place);
     if (anyMissingPlace && !confirm('Some stops have no location selected, so weather will need to be entered manually. Save anyway?')) return;
     try {
+      const modes = [...stops.map(s => s.mode), homeMode];
       let id: number;
       if (stops.length === 1) {
-        id = await createTrip(stops[0].place?.name ?? stops[0].query, stops[0].place, stops[0].start, stops[0].end);
+        id = await createTrip(stops[0].place?.name ?? stops[0].query, stops[0].place, stops[0].start, stops[0].end, undefined, modes);
       } else {
         const tripStops: TripStop[] = stops.map(s => ({
           label: s.place?.label ?? s.query,
@@ -62,7 +67,7 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
           startDate: s.start,
           endDate: s.end,
         }));
-        id = await createTrip(stops[0].place?.name ?? stops[0].query, stops[0].place, tripStart, tripEnd, tripStops);
+        id = await createTrip(stops[0].place?.name ?? stops[0].query, stops[0].place, tripStart, tripEnd, tripStops, modes);
       }
       onDone();
       navigate(`/trips/${id}`);
@@ -99,6 +104,7 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
               onChange={(s, e) => updateStop(i, { start: s, end: e })}
             />
           </Field>
+          <TravelModeSelect label={i === 0 ? 'Getting there by' : `Getting to ${stop.query.trim() || 'this stop'} by`} value={stop.mode} onChange={m => updateStop(i, { mode: m })} />
           <p className="text-xs text-slate-500">
             {dateRange(stop.start, stop.end).length} day{dateRange(stop.start, stop.end).length !== 1 ? 's' : ''}
           </p>
@@ -109,6 +115,9 @@ function NewTripForm({ onDone }: { onDone: () => void }) {
         className="flex items-center gap-1 text-sm text-teal-700 hover:text-teal-900">
         <Icon name="plus" className="h-4 w-4" /> Add another destination
       </button>
+
+      <TravelModeSelect label="Getting home by" value={homeMode} onChange={setHomeMode} />
+      <p className="text-xs text-slate-500">These preload the placeholder transportation on the Itinerary page.</p>
 
       <p className="text-sm text-slate-600">
         {stops.length > 1 && `Total: `}

@@ -13,6 +13,28 @@ const rome = { label: 'Rome, Italy', lat: 41.9, lon: 12.5, startDate: '2026-06-1
 const florence = { label: 'Florence, Italy', lat: 43.77, lon: 11.25, startDate: '2026-06-13', endDate: '2026-06-16' };
 const legs = async (tripId: number) => (await db.tripTransport.where('tripId').equals(tripId).toArray()).sort((a, b) => a.departureDate.localeCompare(b.departureDate) || a.createdAt - b.createdAt);
 
+describe('placeholder transportation by kind of travel', () => {
+  it('uses the chosen kind of travel for each hop, with airports only for flights', async () => {
+    await setSetting('homeLocation', { label: 'Boston, Massachusetts, United States', lat: 42.36, lon: -71.06 });
+    const stops: TripStop[] = [rome, florence];
+    const tripId = await createTrip('Rome', undefined, '2026-06-10', '2026-06-16', stops, ['fly', 'train', 'drive']);
+    expect((await db.trips.get(tripId))!.travelModes).toEqual(['fly', 'train', 'drive']);
+    const list = await legs(tripId);
+    expect(list.map((l) => l.mode)).toEqual(['fly', 'train', 'drive']);
+    expect(list[0].fromPoint).toMatch(/^JFK/); // flight from the home airport
+    expect(list[0].toPoint).toMatch(/^FCO/);
+    expect([list[1].fromPoint, list[1].toPoint]).toEqual(['Rome, Italy', 'Florence, Italy']); // train: cities
+    expect([list[2].fromPoint, list[2].toPoint]).toEqual(['Florence, Italy', 'Boston, Massachusetts']); // drive home: cities
+  });
+
+  it('rebuilds placeholders when the chosen kinds of travel change', async () => {
+    const tripId = await createTrip('Rome', undefined, '2026-06-10', '2026-06-16', [rome, florence]);
+    await db.trips.update(tripId, { travelModes: ['fly', 'boat', 'fly'] });
+    await refreshPlaceholders(tripId);
+    expect((await legs(tripId)).map((l) => l.mode)).toEqual(['fly', 'boat', 'fly']);
+  });
+});
+
 describe('placeholder transportation', () => {
   it('creates home → stop → … → home hops with dates from the destinations', async () => {
     const stops: TripStop[] = [rome, florence];

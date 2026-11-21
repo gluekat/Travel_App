@@ -1,6 +1,6 @@
 import { db } from '../../db/schema';
 import { emptyOutfit } from '../../db/migrate';
-import type { Activity, Trip, TripStop } from '../../db/types';
+import type { Activity, TransportMode, Trip, TripStop } from '../../db/types';
 import { addDays, dateRange, daysBetween, todayISO } from '../../lib/dates';
 import type { Place } from '../../weather/openMeteo';
 import { syncPacking } from '../outfits/outfitService';
@@ -21,6 +21,7 @@ export async function createTrip(
   startDate: string,
   endDate: string,
   stops?: TripStop[],
+  travelModes?: TransportMode[],
 ): Promise<number> {
   const dates = dateRange(startDate, endDate);
   if (!dates.length) throw new Error('End date must be on or after the start date.');
@@ -40,6 +41,7 @@ export async function createTrip(
       endDate,
       createdAt: Date.now(),
       stops: hasStops ? stops : undefined,
+      travelModes,
     })) as number;
     const dayIds = (await db.tripDays.bulkAdd(
       dates.map((date) => ({ tripId, date, activities: defaultDayActivities(date, startDate, endDate) })),

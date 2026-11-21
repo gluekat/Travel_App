@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { geocode, type Place } from '../../weather/openMeteo';
 import { useOnline } from '../../lib/hooks';
-import { inputClass } from '../../components/ui';
+import { inputClass, selectAllOnFocus } from '../../components/ui';
 
 /** Destination lookup via Open-Meteo geocoding — searches automatically as you type. */
 export function PlaceSearch({
@@ -55,6 +55,7 @@ export function PlaceSearch({
       <div className="relative">
         <input
           className={inputClass}
+          {...selectAllOnFocus}
           value={query}
           placeholder="City, e.g. Lisbon"
           onChange={(e) => handleInput(e.target.value)}
