@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { ClosetItem, SavedOutfit } from '../../db/types';
@@ -7,9 +7,33 @@ import { ItemThumb } from '../../components/ItemThumb';
 import { Button, Chip, Icon } from '../../components/ui';
 import { deleteSavedOutfit, duplicateSavedOutfit, saveOutfitToCloset, updateSavedOutfit } from './savedOutfitService';
 
+/** Create or edit a saved outfit: its name and items, with the selected items shown while you choose. */
+function OutfitEditor({ outfit, closet, onClose }: { outfit?: SavedOutfit; closet: Map<number, ClosetItem>; onClose: () => void }) {
+  const [name, setName] = useState(outfit?.name ?? '');
+  return (
+    <ClosetPicker
+      title={outfit ? `Edit ${outfit.name}` : 'New outfit'}
+      closet={[...closet.values()]}
+      initialPicked={outfit?.itemIds}
+      showSelected
+      allowEmpty={!!outfit}
+      nameField={{ label: 'Outfit name', value: name, onChange: setName, placeholder: 'My outfit' }}
+      confirmLabel={(n) => (outfit ? `Save changes${n ? ` (${n} items)` : ''}` : `Create outfit${n ? ` (${n} items)` : ''}`)}
+      onPick={async (ids) => {
+        if (outfit) await updateSavedOutfit(outfit.id!, { name: name.trim() || outfit.name, itemIds: ids });
+        else await saveOutfitToCloset(name, ids);
+      }}
+      onClose={onClose}
+    />
+  );
+}
+
 function SavedOutfitCard({ outfit, closet }: { outfit: SavedOutfit; closet: Map<number, ClosetItem> }) {
   const [name, setName] = useState(outfit.name);
+  // Follow renames made elsewhere (the editor, another tab).
+  useEffect(() => setName(outfit.name), [outfit.name]);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(false);
   const items = outfit.itemIds.map((id) => closet.get(id)).filter((i): i is ClosetItem => !!i);
 
   return (
@@ -32,6 +56,14 @@ function SavedOutfitCard({ outfit, closet }: { outfit: SavedOutfit; closet: Map<
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           aria-label="Outfit name"
         />
+        <button
+          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          onClick={() => setEditing(true)}
+          aria-label={`Edit ${outfit.name}`}
+          title="Edit name and items"
+        >
+          <Icon name="edit" />
+        </button>
         <button
           className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
           onClick={() => void duplicateSavedOutfit(outfit.id!)}
@@ -70,6 +102,7 @@ function SavedOutfitCard({ outfit, closet }: { outfit: SavedOutfit; closet: Map<
       <Button variant="ghost" className="mt-2" onClick={() => setAdding(true)}>
         <Icon name="plus" /> Add items
       </Button>
+      {editing && <OutfitEditor outfit={outfit} closet={closet} onClose={() => setEditing(false)} />}
       {adding && (
         <ClosetPicker
           title={`Add items to ${outfit.name}`}
@@ -116,19 +149,7 @@ export function SavedOutfitsView() {
         ))}
       </ul>
       {outfits.length > 0 && visible.length === 0 && <p className="text-sm text-slate-500">No favorite outfits yet. Tap ★ on an outfit.</p>}
-      {creating && (
-        <ClosetPicker
-          title="New outfit: pick its items"
-          closet={[...closet.values()]}
-          showSelected
-          confirmLabel={(n) => `Create outfit${n ? ` (${n} items)` : ''}`}
-          onPick={async (ids) => {
-            const name = prompt('Name this outfit:', 'My outfit');
-            if (name != null) await saveOutfitToCloset(name, ids);
-          }}
-          onClose={() => setCreating(false)}
-        />
-      )}
+      {creating && <OutfitEditor closet={closet} onClose={() => setCreating(false)} />}
     </div>
   );
 }

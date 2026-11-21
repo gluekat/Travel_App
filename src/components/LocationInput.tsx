@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { geocode } from '../weather/openMeteo';
 import { searchAirportsOnline, searchPOI } from '../weather/photon';
 import { airportLabel, searchAirports } from '../lib/airports';
-import { inputClass } from './ui';
+import { inputClass, selectAllOnFocus } from './ui';
 
 interface SearchResult {
   /** Bold primary line in the dropdown. */
@@ -129,6 +129,7 @@ export function LocationInput({ value, onChange, placeholder, ariaLabel, mode = 
         value={query}
         placeholder={placeholder}
         aria-label={ariaLabel}
+        {...selectAllOnFocus}
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {

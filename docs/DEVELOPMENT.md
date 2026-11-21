@@ -240,6 +240,7 @@ The application code is about 11,500 lines of TypeScript/TSX, tests included.
 - **PackingItem**: `tripId, packed`, plus either `itemId` (closet item; copies computed from outfits) or `customLabel` with `qty` or `perDay` (general item).
 - **SavedOutfit**: `name, itemIds[], favorite, createdAt, updatedAt`.
 - **TransportLeg**: `direction` (outbound/return), `mode` (fly, drive, train, boat), dates/times, `from/to` points with coordinates, `carrier, identifier, bookingRef`, `connections[]` (stops with arrive/depart date+time, carrier, identifier, coordinates), `needsAttention?`, `placeholder?` (a suggested hop not yet filled in; created by `refreshPlaceholders` from the trip's destinations, replaced when destinations or dates change, never touching real bookings, cleared on save). A booking is split into individual legs at display time (`legSegments`).
+- **Trip.travelModes**: kind of travel per hop (each destination, then home); drives the mode and endpoints (airports vs cities) of placeholder legs in `placeholders.ts`.
 - **TripLodging**, **ScheduledActivity**: stays and activities per trip/day; `TripLodging.needsAttention?`.
 - **GeneralItem**: `name, qty | perDay, isDefault` (the *Default* tag), `tags[]` (trip types + custom), `category` (Toiletries, Electronics, …), `emoji?, photo?`.
 - **TrashEntry**: `kind` (trip, closetItem, savedOutfit, generalItem), `name, deletedAt, data` (a snapshot: a whole trip with its rows; a closet item with the outfits, saved outfits and packing rows it was removed from).
@@ -488,8 +489,8 @@ Repository setting: *Settings → Pages → Source = GitHub Actions*. With "Depl
 | `src/features/packing/generalItems.test.ts` | 5 | Default general items on new trips, categories, sleepwear fill, travel days, date-change proposals and flags |
 | `src/features/trash/trash.test.ts` | 4 | Trip and closet-item restore, general items, 30-day expiry, samples bypass the trash |
 | `src/lib/emoji.test.ts` | 1 | Emoji suggestions |
-| `src/features/trips/placeholders.test.ts` | 3 | Placeholder hops for single / multi-stop trips, regeneration after editing stops, real bookings untouched |
-| **Total** | **114** | All passing |
+| `src/features/trips/placeholders.test.ts` | 5 | Placeholder hops for single / multi-stop trips and per-hop travel modes, regeneration after editing stops, real bookings untouched |
+| **Total** | **116** | All passing |
 
 The network is always mocked; no test calls Open-Meteo.
 

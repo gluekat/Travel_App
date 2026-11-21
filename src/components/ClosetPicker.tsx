@@ -13,6 +13,9 @@ export function ClosetPicker({
   hint,
   alreadyIn,
   showSelected,
+  initialPicked,
+  nameField,
+  allowEmpty,
   onPick,
   onClose,
 }: {
@@ -26,12 +29,18 @@ export function ClosetPicker({
   alreadyIn?: number[];
   /** Show a panel of the selected items while choosing (also on whenever `alreadyIn` is given). */
   showSelected?: boolean;
+  /** Items that start out selected (editing an outfit); they can be unticked and the pick then replaces the outfit's items. */
+  initialPicked?: number[];
+  /** A name box shown above the list (outfit editor). */
+  nameField?: { label: string; value: string; onChange: (v: string) => void; placeholder?: string };
+  /** Allow confirming with nothing selected. */
+  allowEmpty?: boolean;
   onPick: (ids: number[]) => Promise<void> | void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category | null>(null);
-  const [picked, setPicked] = useState<number[]>([]);
+  const [picked, setPicked] = useState<number[]>(initialPicked ?? []);
   const q = query.trim().toLowerCase();
   const list = closet
     .filter(
@@ -49,6 +58,12 @@ export function ClosetPicker({
   return (
     <Modal title={title} onClose={onClose}>
       <div className="space-y-3">
+        {nameField && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-700">{nameField.label}</span>
+            <input className={inputClass} value={nameField.value} placeholder={nameField.placeholder} onChange={(e) => nameField.onChange(e.target.value)} autoFocus />
+          </label>
+        )}
         <input type="search" className={inputClass} placeholder="Search name, color or tag…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search closet" />
         <div className="flex flex-wrap gap-1.5">
           <Chip active={!category} onClick={() => setCategory(null)}>
@@ -114,7 +129,7 @@ export function ClosetPicker({
           <Button onClick={onClose}>Cancel</Button>
           <Button
             variant="primary"
-            disabled={!picked.length}
+            disabled={!picked.length && !allowEmpty}
             onClick={async () => {
               await onPick(picked);
               onClose();

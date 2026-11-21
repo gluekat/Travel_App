@@ -5,7 +5,7 @@ import { downloadBackup, importBackupFile, saveBackupAs } from '../../db/backup'
 import { requestPersistentStorage, storageEstimate, type PersistStatus } from '../../db/persist';
 import { formatTimestamp } from '../../lib/dates';
 import { useTempUnit } from '../../lib/hooks';
-import { Banner, Button, Card, Chip, inputClass } from '../../components/ui';
+import { Banner, Button, Card, Chip, inputClass, selectAllOnFocus } from '../../components/ui';
 import { LocationInput } from '../../components/LocationInput';
 import { PrivacyNote } from './PrivacyNote';
 import { DataFilePanel } from './DataFilePanel';
@@ -100,6 +100,7 @@ function HomeAirportCard() {
             defaultValue={stored ?? ''}
             placeholder="e.g. LAX"
             maxLength={5}
+            {...selectAllOnFocus}
             onBlur={(e) => void save(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           />
